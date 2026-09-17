@@ -1,19 +1,28 @@
-import streamlit as st
-import pandas as pd
-import datetime
+import os
 import urllib.parse
-from PIL import Image
+import pandas as pd
+import streamlit as st
 from supabase import create_client, Client
 
-# Desactivar límite de píxeles para imágenes grandes
-Image.MAX_IMAGE_PIXELS = None
+# ==========================================
+# 1. BÚSQUEDA Y DEFINICIÓN DEL LOGO (GLOBAL)
+# ==========================================
+def obtener_ruta_logo():
+    # Intenta localizar el archivo sin importar mayúsculas/minúsculas
+    for archivo in ["logo.png", "logo.PNG", "LOGO.PNG", "logo.jpg"]:
+        if os.path.exists(archivo):
+            return archivo
+    return None
+
+# SE DEFINE LA VARIABLE GLOBALMENTE DESDE EL PRINCIPIO
+logo_path = obtener_ruta_logo()
 
 # ==========================================
-# CONFIGURACIÓN DE PÁGINA
+# 2. CONFIGURACIÓN DE PÁGINA
 # ==========================================
 st.set_page_config(
     page_title="Z&A Taller Creativo - Cotizador",
-    page_icon="✂️",
+    page_icon=logo_path if logo_path else "✂️",
     layout="wide"
 )
 
