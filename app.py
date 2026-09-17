@@ -41,12 +41,14 @@ def init_supabase() -> Client:
 supabase = init_supabase()
 
 # ==========================================
-# FUNCIONES DE BASE DE DATOS
+# FUNCIONES DE BASE DE DATOS OPTIMIZADAS
 # ==========================================
+@st.cache_data(ttl=600)  # Guarda en caché por 10 minutos
 def cargar_materiales():
     res = supabase.table("materiales").select("*").execute()
     return {item["nombre"]: float(item["costo_cm2"]) for item in res.data}
 
+@st.cache_data(ttl=600)  # Guarda en caché por 10 minutos
 def cargar_catalogo():
     res = supabase.table("catalogo").select("*").execute()
     cat_dict = {}
