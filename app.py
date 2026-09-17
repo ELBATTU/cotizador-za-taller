@@ -386,27 +386,39 @@ with tab_admin:
                 btn_add = st.form_submit_button("✨ Guardar Producto Nuevo", type="primary", use_container_width=True)
                 
                 if btn_add:
-                    if not n_p.strip():
-                        st.error("❌ El nombre del producto no puede estar vacío.")
-                    else:
-                        foto_url = None
-                        if foto_up:
-                            file_ext = foto_up.name.split(".")[-1]
-                            file_path = f"{n_p.strip().lower().replace(' ', '_')}.{file_ext}"
-                            file_bytes = foto_up.getvalue()
-                            
-                            supabase.storage.from_("productos_img").upload(
-                                file_path, file_bytes, {"content-type": foto_up.type, "x-upsert": "true"}
-                            )
-                            foto_url = supabase.storage.from_("productos_img").get_public_url(file_path)
+    if not n_p.strip():
+        st.error("❌ El nombre del producto no puede estar vacío.")
+    else:
+        foto_url = None
+        if foto_up:
+            file_ext = foto_up.name.split(".")[-1]
+            file_path = f"{n_p.strip().lower().replace(' ', '_')}.{file_ext}"
+            file_bytes = foto_up.getvalue()
+            
+            # SUBIDA CORREGIDA: Se pasa upsert=True directamente o en file_options
+            try:
+                supabase.storage.from_("productos_img").upload(
+                    path=file_path,
+                    file=file_bytes,
+                    file_options={"content-type": foto_up.type, "upsert": "true"}
+                )
+            except Exception:
+                # Si el archivo ya existe y rechaza el POST, forzamos la actualización (upsert)
+                supabase.storage.from_("productos_img").update(
+                    path=file_path,
+                    file=file_bytes,
+                    file_options={"content-type": foto_up.type}
+                )
+                
+            foto_url = supabase.storage.from_("productos_img").get_public_url(file_path)
 
-                        supabase.table("catalogo").insert({
-                            "nombre": n_p.strip(), "largo": l_p, "ancho": a_p, 
-                            "tiempo": t_p, "material": m_p, "foto_url": foto_url
-                        }).execute()
-                        st.cache_data.clear()
-                        st.success(f"✅ Producto '{n_p}' registrado correctamente.")
-                        st.rerun()
+        supabase.table("catalogo").insert({
+            "nombre": n_p.strip(), "largo": l_p, "ancho": a_p, 
+            "tiempo": t_p, "material": m_p, "foto_url": foto_url
+        }).execute()
+        st.cache_data.clear()
+        st.success(f"✅ Producto '{n_p}' registrado correctamente.")
+        st.rerun()
 
         # 1.2 MODIFICAR PRODUCTO
         with prod_edit_tab:
@@ -463,11 +475,25 @@ with tab_admin:
                 p_del = st.selectbox("Selecciona producto a eliminar permanentemente:", prods_del, key="sel_del_prod")
                 st.warning(f"⚠️ ¿Estás seguro de que deseas eliminar '{p_del}'? Esta acción no se puede deshacer.")
                 
-                if st.button("❌ Confirmar y Eliminar Producto", type="primary", key="btn_del_prod_confirm"):
-                    supabase.table("catalogo").delete().eq("nombre", p_del).execute()
-                    st.cache_data.clear()
-                    st.success(f"✅ Producto '{p_del}' eliminado del catálogo.")
-                    st.rerun()
+                # ELIMINAR PRODUCTO COMPLETO (REGISTRO + IMAGEN)
+if st.button("❌ Confirmar y Eliminar Producto", type="primary", key="btn_del_prod_confirm"):
+    # 1. Obtener la ruta de la imagen antes de borrar el registro
+    foto_url = CATALOGO[p_del].get("foto")
+    
+    # 2. Eliminar el registro de Supabase DB
+    supabase.table("catalogo").delete().eq("nombre", p_del).execute()
+    
+    # 3. Eliminar la imagen del Bucket de Supabase Storage
+    if foto_url:
+        try:
+            nombre_archivo = foto_url.split("/")[-1]
+            supabase.storage.from_("productos_img").remove([nombre_archivo])
+        except Exception:
+            pass  # Si la imagen no existía en el bucket, continúa sin romper la app
+            
+    st.cache_data.clear()
+    st.success(f"✅ Producto '{p_del}' e imagen eliminados correctamente.")
+    st.rerun()
             else:
                 st.info("💡 No hay productos en el catálogo para eliminar.")
 
