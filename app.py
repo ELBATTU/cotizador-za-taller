@@ -17,12 +17,11 @@ st.set_page_config(
     layout="wide"
 )
 
-# Carga del logo local
+# Carga del logo local sin decorador de cache
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LOGO_PATH = os.path.join(BASE_DIR, "logo.png")
 
-@st.cache_data
-def cargar_logo_cache():
+def cargar_logo():
     if os.path.exists(LOGO_PATH):
         try:
             return Image.open(LOGO_PATH)
@@ -30,7 +29,7 @@ def cargar_logo_cache():
             return None
     return None
 
-logo_img = cargar_logo_cache()
+logo_img = cargar_logo()
 
 # ==========================================
 # INICIALIZACIÓN DE SUPABASE
