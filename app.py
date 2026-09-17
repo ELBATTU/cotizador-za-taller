@@ -373,16 +373,23 @@ with tab_admin:
                 st.success(f"✅ Material '{mat_del_sel}' eliminado correctamente")
                 st.rerun()
 
-    # GESTIÓN DE PRODUCTOS
+# GESTIÓN DE PRODUCTOS
     with subtab_prod:
         st.subheader("📦 Catálogo de Productos Registrados")
-        df_prod_disp = pd.DataFrame([
-            {
-                "Producto": k, "Largo (cm)": v["largo"], "Ancho (cm)": v["ancho"], 
-                "Tiempo (min)": v["tiempo"], "Material Default": v["material"], "Tiene Foto": "Sí" if v["foto"] else "No"
-            }
-            for k, v in CATALOGO.keys() if (v := CATALOGO[k])
-        ])
+        
+        # Construcción limpia de la tabla de productos
+        lista_prod_tabla = []
+        for nombre_p, datos_p in CATALOGO.items():
+            lista_prod_tabla.append({
+                "Producto": nombre_p, 
+                "Largo (cm)": datos_p["largo"], 
+                "Ancho (cm)": datos_p["ancho"], 
+                "Tiempo (min)": datos_p["tiempo"], 
+                "Material Default": datos_p["material"], 
+                "Tiene Foto": "Sí" if datos_p["foto"] else "No"
+            })
+            
+        df_prod_disp = pd.DataFrame(lista_prod_tabla)
         st.dataframe(df_prod_disp, use_container_width=True)
         st.markdown("---")
 
