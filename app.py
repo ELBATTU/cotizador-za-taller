@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import datetime
 import urllib.parse
+import time
 from PIL import Image
 from supabase import create_client, Client
 
@@ -80,7 +81,6 @@ st.markdown("""
     th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #ddd; }
     th { background-color: #f0f2f6; color: #333; }
     
-    /* Estilos para Tarjetas del Desglose Técnico */
     .card-tech {
         background-color: #F8F9FA;
         border-left: 5px solid #1E88E5;
@@ -197,7 +197,6 @@ with tab_cotizador:
         tiempo = col_t.number_input("Tiempo Láser por Pieza (min):", value=float(datos_prod["tiempo"]), min_value=0.1, step=0.5)
         cantidad = col_c.number_input("Cantidad Pedida (piezas):", value=1, min_value=1, step=1)
 
-    # CÁLCULOS MATEMÁTICOS DE COSTOS
     area_bruta = largo * ancho
     area_con_merma = area_bruta * desperdicio_factor
     costo_cm2 = precios_materiales.get(material, 0.0)
@@ -216,14 +215,12 @@ with tab_cotizador:
 
     st.markdown("---")
     
-    # MÉTRICAS PRINCIPALES
     res_col1, res_col2, res_col3, res_col4 = st.columns(4)
     res_col1.metric("Costo Producción (1 pz)", f"${costo_prod_unitario:.2f} MXN")
     res_col2.metric("Precio Base (1 pz)", f"${precio_unitario_base:.2f} MXN")
     res_col3.metric("Descuento Mayoreo", f"{int(descuento_pct * 100)}%")
     res_col4.metric("PRECIO TOTAL", f"${precio_total_neto:.2f} MXN", delta=f"{cantidad} pieza(s)")
 
-    # DESGLOSE TÉCNICO AVANZADO
     with st.expander("🔍 **Ver Desglose Técnico & Estructura de Costos Interfaz**", expanded=False):
         st.markdown("### 📊 Análisis Detallado de Cotización")
         
@@ -267,7 +264,6 @@ with tab_cotizador:
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # BOTONES DE ACCIÓN
     col_act1, col_act2 = st.columns(2)
     with col_act1:
         cliente_txt = nombre_cliente.strip() if nombre_cliente.strip() else "Cliente"
@@ -298,6 +294,7 @@ with tab_cotizador:
                 "total_cobrado": round(precio_total_neto, 2)
             }
             supabase.table("historial_cotizaciones").insert(data_cot).execute()
+            st.toast("¡Cotización guardada exitosamente!", icon="✅")
             st.success("✅ ¡Cotización guardada en Supabase!")
 
 # ------------------------------------------
@@ -335,7 +332,9 @@ with tab_historial:
                         "precio_unitario": float(row["Precio Unitario"]),
                         "total_cobrado": float(row["Total Cobrado"])
                     }).eq("id", row["id"]).execute()
+            st.toast("Historial de cotizaciones actualizado correctamente", icon="📝")
             st.success("✅ Historial actualizado.")
+            time.sleep(1)
             st.rerun()
     else:
         st.info("💡 Aún no hay cotizaciones guardadas.")
@@ -361,7 +360,7 @@ with tab_admin:
             "🗑️ Eliminar Producto"
         ])
         
-        # 1.1 AGREGAR PRODUCTO (CON MANEJO SEGURO DE ALMACENAMIENTO)
+        # 1.1 AGREGAR PRODUCTO
         with prod_add_tab:
             st.markdown("### ➕ Registrar Nuevo Producto en Catálogo")
             with st.form("form_add_prod"):
@@ -405,7 +404,11 @@ with tab_admin:
                             "tiempo": t_p, "material": m_p, "foto_url": foto_url
                         }).execute()
                         st.cache_data.clear()
+                        
+                        # Alerta visual
+                        st.toast(f"Producto '{n_p}' registrado con éxito", icon="📦")
                         st.success(f"✅ Producto '{n_p}' registrado correctamente.")
+                        time.sleep(1.2)
                         st.rerun()
 
         # 1.2 MODIFICAR PRODUCTO
@@ -458,12 +461,16 @@ with tab_admin:
                         }).eq("nombre", p_edit_sel).execute()
                         
                         st.cache_data.clear()
+                        
+                        # Alerta visual
+                        st.toast(f"Producto '{p_edit_sel}' actualizado correctamente", icon="✏️")
                         st.success(f"✅ Producto '{p_edit_sel}' actualizado.")
+                        time.sleep(1.2)
                         st.rerun()
             else:
                 st.info("💡 No hay productos en el catálogo para editar.")
 
-        # 1.3 ELIMINAR PRODUCTO (LIMPIEZA COMPLETA DE REGISTRO E IMAGEN)
+        # 1.3 ELIMINAR PRODUCTO
         with prod_del_tab:
             st.markdown("### 🗑️ Dar de Baja Producto")
             prods_del = [p for p in CATALOGO.keys() if p != "Personalizado (Medida Libre)"]
@@ -485,7 +492,11 @@ with tab_admin:
                             pass
                             
                     st.cache_data.clear()
+                    
+                    # Alerta visual
+                    st.toast(f"Producto '{p_del}' eliminado del catálogo", icon="🗑️")
                     st.success(f"✅ Producto '{p_del}' e imagen eliminados correctamente.")
+                    time.sleep(1.2)
                     st.rerun()
             else:
                 st.info("💡 No hay productos en el catálogo para eliminar.")
@@ -519,7 +530,11 @@ with tab_admin:
                         c_cm2 = p_m / (l_m * a_m)
                         supabase.table("materiales").insert({"nombre": nom_m.strip(), "costo_cm2": c_cm2}).execute()
                         st.cache_data.clear()
+                        
+                        # Alerta visual
+                        st.toast(f"Material '{nom_m}' agregado con costo de ${c_cm2:.4f}/cm²", icon="🪵")
                         st.success(f"✅ Material '{nom_m}' registrado con costo de ${c_cm2:.4f}/cm².")
+                        time.sleep(1.2)
                         st.rerun()
 
         # 2.2 MODIFICAR MATERIAL
@@ -544,7 +559,11 @@ with tab_admin:
                         nuevo_c_cm2 = p_m_edit / (l_m_edit * a_m_edit)
                         supabase.table("materiales").update({"costo_cm2": nuevo_c_cm2}).eq("nombre", mat_edit_sel).execute()
                         st.cache_data.clear()
+                        
+                        # Alerta visual
+                        st.toast(f"Material '{mat_edit_sel}' actualizado a ${nuevo_c_cm2:.4f}/cm²", icon="✏️")
                         st.success(f"✅ Material '{mat_edit_sel}' actualizado a ${nuevo_c_cm2:.4f}/cm².")
+                        time.sleep(1.2)
                         st.rerun()
             else:
                 st.info("💡 No hay materiales registrados.")
@@ -561,7 +580,11 @@ with tab_admin:
                 if st.button("❌ Confirmar y Eliminar Material", type="primary", key="btn_del_mat_confirm"):
                     supabase.table("materiales").delete().eq("nombre", mat_del).execute()
                     st.cache_data.clear()
+                    
+                    # Alerta visual
+                    st.toast(f"Material '{mat_del}' eliminado del sistema", icon="🗑️")
                     st.success(f"✅ Material '{mat_del}' eliminado.")
+                    time.sleep(1.2)
                     st.rerun()
             else:
                 st.info("💡 No hay materiales registrados para eliminar.")
