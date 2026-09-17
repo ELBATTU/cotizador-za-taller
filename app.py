@@ -1,8 +1,7 @@
 import os
-import streamlit as st
-import pandas as pd
-import datetime
 import urllib.parse
+import pandas as pd
+import streamlit as st
 from PIL import Image
 from supabase import create_client, Client
 
@@ -10,7 +9,7 @@ from supabase import create_client, Client
 Image.MAX_IMAGE_PIXELS = None
 
 # ==========================================
-# CONFIGURACIÓN DE PÁGINA Y CARGA DE LOGO
+# CONFIGURACIÓN DE PÁGINA
 # ==========================================
 st.set_page_config(
     page_title="Z&A Taller Creativo - Cotizador",
@@ -18,7 +17,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Carga del logo desde la raíz del repositorio
+# Carga del logo local
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LOGO_PATH = os.path.join(BASE_DIR, "logo.png")
 
