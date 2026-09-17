@@ -2,23 +2,26 @@ import os
 import urllib.parse
 import pandas as pd
 import streamlit as st
+from PIL import Image
 from supabase import create_client, Client
 
+# Desactivar límite de píxeles para imágenes grandes
+Image.MAX_IMAGE_PIXELS = None
+
 # ==========================================
-# 1. BÚSQUEDA Y DEFINICIÓN DEL LOGO (GLOBAL)
+# VERIFICACIÓN Y RUTA DEL LOGO
 # ==========================================
 def obtener_ruta_logo():
-    # Intenta localizar el archivo sin importar mayúsculas/minúsculas
+    # Detecta el logo sin importar si la extensión viene en mayúsculas o minúsculas
     for archivo in ["logo.png", "logo.PNG", "LOGO.PNG", "logo.jpg"]:
         if os.path.exists(archivo):
             return archivo
     return None
 
-# SE DEFINE LA VARIABLE GLOBALMENTE DESDE EL PRINCIPIO
 logo_path = obtener_ruta_logo()
 
 # ==========================================
-# 2. CONFIGURACIÓN DE PÁGINA
+# CONFIGURACIÓN DE PÁGINA
 # ==========================================
 st.set_page_config(
     page_title="Z&A Taller Creativo - Cotizador",
@@ -100,10 +103,12 @@ def verificar_password():
         _, col2, _ = st.columns([1, 2, 1])
         with col2:
             st.markdown("<br><br>", unsafe_allow_html=True)
+            if logo_path:
+                st.image(logo_path, width=220)
             st.subheader("🔒 Acceso Restringido - Z&A Taller Creativo")
             pwd_input = st.text_input("Ingresa la contraseña del taller:", type="password")
             
-            if st.button("Ingresar", type="primary", use_container_width=True):
+            if st.button("Ingresar", type="primary", use_container_width=True, key="btn_login_main"):
                 pwd_correcta = st.secrets.get("passwords", {}).get("admin", "ZA2026*")
                 if pwd_input == pwd_correcta:
                     st.session_state["autenticado"] = True
@@ -120,8 +125,10 @@ if not verificar_password():
 # BARRA LATERAL
 # ==========================================
 with st.sidebar:
+    if logo_path:
+        st.image(logo_path, use_container_width=True)
     st.markdown("<h2 style='text-align: center; color: #4A90E2;'>Z&A TALLER CREATIVO</h2>", unsafe_allow_html=True)
-    if st.button("🔒 Cerrar Sesión", use_container_width=True):
+    if st.button("🔒 Cerrar Sesión", use_container_width=True, key="btn_logout_sidebar"):
         st.session_state["autenticado"] = False
         st.rerun()
 
@@ -145,8 +152,13 @@ tab_cotizador, tab_historial, tab_admin = st.tabs([
 # TAB 1: COTIZADOR INTERACTIVO
 # ------------------------------------------
 with tab_cotizador:
-    st.markdown("<h1 style='color: #1E88E5;'>Z&A Taller Creativo</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='font-size: 18px; color: #888;'>Cotizador Interactivo - Corte & Grabado Láser CNC</p>", unsafe_allow_html=True)
+    col_hdr_logo, col_hdr_txt = st.columns([1, 5], vertical_alignment="center")
+    with col_hdr_logo:
+        if logo_path:
+            st.image(logo_path, width=120)
+    with col_hdr_txt:
+        st.markdown("<h1 style='color: #1E88E5; margin:0;'>Z&A Taller Creativo</h1>", unsafe_allow_html=True)
+        st.markdown("<p style='font-size: 18px; color: #888; margin:0;'>Cotizador Interactivo - Corte & Grabado Láser CNC</p>", unsafe_allow_html=True)
     st.markdown("---")
 
     col_cat, col_inputs = st.columns([1, 1.2])
@@ -253,13 +265,12 @@ with tab_historial:
             num_rows="dynamic",
             key="editor_historial",
             column_config={
-                "id": None, # Ocultar ID interno
+                "id": None,
                 "Fecha": st.column_config.TextColumn("Fecha", disabled=True)
             }
         )
 
         if st.button("💾 Guardar Cambios en Historial", type="primary"):
-            # Sincronizar ediciones directo a Supabase
             for _, row in df_editado.iterrows():
                 if pd.notnull(row["id"]):
                     supabase.table("historial_cotizaciones").update({
@@ -324,7 +335,6 @@ with tab_admin:
                 file_path = f"{n_p.strip().lower().replace(' ', '_')}.{file_ext}"
                 file_bytes = foto_up.getvalue()
                 
-                # Subir archivo al bucket de Supabase
                 supabase.storage.from_("productos_img").upload(file_path, file_bytes, {"content-type": foto_up.type})
                 foto_url = supabase.storage.from_("productos_img").get_public_url(file_path)
 
