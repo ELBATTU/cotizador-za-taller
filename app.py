@@ -2,34 +2,25 @@ import os
 import urllib.parse
 import pandas as pd
 import streamlit as st
-from PIL import Image
 from supabase import create_client, Client
-
-# Desactivar límite de píxeles para imágenes grandes
-Image.MAX_IMAGE_PIXELS = None
 
 # ==========================================
 # CONFIGURACIÓN DE PÁGINA
 # ==========================================
-st.set_page_config(
-    page_title="Z&A Taller Creativo - Cotizador",
-    page_icon="✂️",
-    layout="wide"
-)
-
-# Carga del logo local sin decorador de cache
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-LOGO_PATH = os.path.join(BASE_DIR, "logo.png")
-
-def cargar_logo():
-    if os.path.exists(LOGO_PATH):
-        try:
-            return Image.open(LOGO_PATH)
-        except Exception:
-            return None
+# Búsqueda directa del logo para el favicon y la app
+def obtener_ruta_logo():
+    for archivo in ["logo.png", "logo.PNG", "LOGO.PNG", "logo.jpg"]:
+        if os.path.exists(archivo):
+            return archivo
     return None
 
-logo_img = cargar_logo()
+logo_path = obtener_ruta_logo()
+
+st.set_page_config(
+    page_title="Z&A Taller Creativo - Cotizador",
+    page_icon=logo_path if logo_path else "✂️",
+    layout="wide"
+)
 
 # ==========================================
 # INICIALIZACIÓN DE SUPABASE
