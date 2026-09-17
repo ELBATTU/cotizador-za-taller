@@ -111,17 +111,17 @@ if not verificar_password():
 # BARRA LATERAL
 # ==========================================
 with st.sidebar:
+    if logo_path:
+        st.image(logo_path, use_container_width=True)
     st.markdown("<h2 style='text-align: center; color: #4A90E2;'>Z&A TALLER CREATIVO</h2>", unsafe_allow_html=True)
-    if st.button("🔒 Cerrar Sesión", use_container_width=True):
+    
+    # Se agrega key="btn_logout_sidebar" para evitar duplicados
+    if st.button("🔒 Cerrar Sesión", use_container_width=True, key="btn_logout_sidebar"):
         st.session_state["autenticado"] = False
         st.rerun()
 
     st.markdown("---")
     st.header("⚙️ Configuración de Costos")
-
-tarifa_minuto = st.sidebar.number_input("Tarifa Láser ($/min):", value=8.0, step=0.5)
-utilidad_porcentaje = st.sidebar.slider("% Utilidad deseada:", min_value=10, max_value=200, value=30, step=5) / 100
-desperdicio_factor = 1.10
 
 # ==========================================
 # PESTAÑAS DE NAVEGACIÓN
