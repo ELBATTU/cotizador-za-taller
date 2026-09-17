@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 import pandas as pd
 import datetime
@@ -9,13 +10,28 @@ from supabase import create_client, Client
 Image.MAX_IMAGE_PIXELS = None
 
 # ==========================================
-# CONFIGURACIÓN DE PÁGINA
+# CONFIGURACIÓN DE PÁGINA Y CARGA DE LOGO
 # ==========================================
 st.set_page_config(
     page_title="Z&A Taller Creativo - Cotizador",
     page_icon="✂️",
     layout="wide"
 )
+
+# Carga del logo desde la raíz del repositorio
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+LOGO_PATH = os.path.join(BASE_DIR, "logo.png")
+
+@st.cache_data
+def cargar_logo_cache():
+    if os.path.exists(LOGO_PATH):
+        try:
+            return Image.open(LOGO_PATH)
+        except Exception:
+            return None
+    return None
+
+logo_img = cargar_logo_cache()
 
 # ==========================================
 # INICIALIZACIÓN DE SUPABASE
