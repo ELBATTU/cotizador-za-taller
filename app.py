@@ -31,10 +31,12 @@ supabase = init_supabase()
 # ==========================================
 # FUNCIONES DE BASE DE DATOS
 # ==========================================
+@st.cache_data(ttl=600)
 def cargar_materiales():
     res = supabase.table("materiales").select("*").execute()
     return {item["nombre"]: float(item["costo_cm2"]) for item in res.data}
 
+@st.cache_data(ttl=600)
 def cargar_catalogo():
     res = supabase.table("catalogo").select("*").execute()
     cat_dict = {}
@@ -97,6 +99,16 @@ st.markdown("""
         justify-content: space-between;
         margin-bottom: 6px;
         font-size: 14px;
+    }
+
+    /* Estilos para Paneles de Administración */
+    .admin-card {
+        background-color: #FFFFFF;
+        border: 1px solid #E0E0E0;
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.03);
     }
     </style>
 """, unsafe_allow_html=True)
@@ -198,15 +210,13 @@ with tab_cotizador:
     # CÁLCULOS MATEMÁTICOS DE COSTOS
     area_bruta = largo * ancho
     area_con_merma = area_bruta * desperdicio_factor
-    costo_cm2 = precios_materiales[material]
+    costo_cm2 = precios_materiales.get(material, 0.0)
     
     costo_mat_unitario = area_con_merma * costo_cm2
     costo_maq_unitario = tiempo * tarifa_minuto
     costo_prod_unitario = costo_mat_unitario + costo_maq_unitario
     
-    ganancia_unid_base = costo_prod_unitario * (utilidad_porcentaje / (1 - utilidad_porcentaje))
     precio_unitario_base = costo_prod_unitario / (1 - utilidad_porcentaje)
-
     descuento_pct = 0.20 if cantidad >= 50 else (0.10 if cantidad >= 12 else 0.00)
     precio_unitario_final = precio_unitario_base * (1 - descuento_pct)
     
@@ -341,71 +351,198 @@ with tab_historial:
         st.info("💡 Aún no hay cotizaciones guardadas.")
 
 # ------------------------------------------
-# TAB 3: ADMINISTRACIÓN
+# TAB 3: PANEL DE ADMINISTRACIÓN RESTRUCTURADO
 # ------------------------------------------
 with tab_admin:
-    st.header("⚙️ Panel de Administración")
-    subtab_mat, subtab_prod_add, subtab_prod_del = st.tabs([
-        "🪵 Administrar Materiales", "➕ Agregar Producto", "🗑️ Eliminar Producto"
+    st.header("⚙️ Panel de Gestión del Taller")
+    
+    main_admin_tab1, main_admin_tab2 = st.tabs([
+        "📦 Gestión de Catálogo de Productos", 
+        "🪵 Gestión de Materiales e Insumos"
     ])
     
-    # MATERIALES
-    with subtab_mat:
-        col_m1, col_m2 = st.columns(2)
-        with col_m1:
-            st.markdown("#### ➕ Agregar Material")
-            nom_m = st.text_input("Nombre Material:")
-            p_m = st.number_input("Precio Placa ($):", value=120.0)
-            l_m = st.number_input("Largo (cm):", value=122.0)
-            a_m = st.number_input("Ancho (cm):", value=244.0)
-            if st.button("Guardar Material", key="btn_add_mat"):
-                c_cm2 = p_m / (l_m * a_m)
-                supabase.table("materiales").insert({"nombre": nom_m.strip(), "costo_cm2": c_cm2}).execute()
-                st.success("Material agregado")
-                st.rerun()
-
-        with col_m2:
-            st.markdown("#### 🗑️ Eliminar Material")
-            mat_del = st.selectbox("Selecciona material:", list(precios_materiales.keys()))
-            if st.button("Eliminar Material", key="btn_del_mat"):
-                supabase.table("materiales").delete().eq("nombre", mat_del).execute()
-                st.success("Material eliminado")
-                st.rerun()
-
-    # AGREGAR PRODUCTO
-    with subtab_prod_add:
-        st.subheader("➕ Agregar Nuevo Producto")
-        n_p = st.text_input("Nombre Producto:")
-        col_pa, col_pb = st.columns(2)
-        l_p = col_pa.number_input("Largo (cm):", value=10.0)
-        a_p = col_pb.number_input("Ancho (cm):", value=10.0)
-        t_p = col_pa.number_input("Tiempo (min):", value=2.0)
-        m_p = col_pb.selectbox("Material default:", list(precios_materiales.keys()))
-        foto_up = st.file_uploader("Imagen:", type=["jpg", "png", "jpeg"])
-
-        if st.button("Guardar Producto Nuevo", key="btn_add_prod"):
-            foto_url = None
-            if foto_up:
-                file_ext = foto_up.name.split(".")[-1]
-                file_path = f"{n_p.strip().lower().replace(' ', '_')}.{file_ext}"
-                file_bytes = foto_up.getvalue()
+    # ==========================================
+    # SUB-PESTAÑA 1: PRODUCTOS
+    # ==========================================
+    with main_admin_tab1:
+        prod_add_tab, prod_edit_tab, prod_del_tab = st.tabs([
+            "➕ Agregar Producto", 
+            "✏️ Modificar Producto", 
+            "🗑️ Eliminar Producto"
+        ])
+        
+        # 1.1 AGREGAR PRODUCTO
+        with prod_add_tab:
+            st.markdown("### ➕ Registrar Nuevo Producto en Catálogo")
+            with st.form("form_add_prod"):
+                n_p = st.text_input("Nombre del Producto:", placeholder="Ej. Llavero Personalizado")
+                col_p1, col_p2 = st.columns(2)
+                l_p = col_p1.number_input("Largo (cm):", value=10.0, min_value=0.1, step=0.5)
+                a_p = col_p2.number_input("Ancho (cm):", value=10.0, min_value=0.1, step=0.5)
+                t_p = col_p1.number_input("Tiempo Láser Estimado (min):", value=2.0, min_value=0.1, step=0.5)
+                m_p = col_p2.selectbox("Material Predeterminado:", list(precios_materiales.keys()))
+                foto_up = st.file_uploader("Imagen del Producto (JPG/PNG):", type=["jpg", "png", "jpeg"])
                 
-                supabase.storage.from_("productos_img").upload(file_path, file_bytes, {"content-type": foto_up.type})
-                foto_url = supabase.storage.from_("productos_img").get_public_url(file_path)
+                btn_add = st.form_submit_button("✨ Guardar Producto Nuevo", type="primary", use_container_width=True)
+                
+                if btn_add:
+                    if not n_p.strip():
+                        st.error("❌ El nombre del producto no puede estar vacío.")
+                    else:
+                        foto_url = None
+                        if foto_up:
+                            file_ext = foto_up.name.split(".")[-1]
+                            file_path = f"{n_p.strip().lower().replace(' ', '_')}.{file_ext}"
+                            file_bytes = foto_up.getvalue()
+                            
+                            supabase.storage.from_("productos_img").upload(
+                                file_path, file_bytes, {"content-type": foto_up.type, "x-upsert": "true"}
+                            )
+                            foto_url = supabase.storage.from_("productos_img").get_public_url(file_path)
 
-            supabase.table("catalogo").insert({
-                "nombre": n_p.strip(), "largo": l_p, "ancho": a_p, 
-                "tiempo": t_p, "material": m_p, "foto_url": foto_url
-            }).execute()
-            st.success("Producto agregado correctamente")
-            st.rerun()
+                        supabase.table("catalogo").insert({
+                            "nombre": n_p.strip(), "largo": l_p, "ancho": a_p, 
+                            "tiempo": t_p, "material": m_p, "foto_url": foto_url
+                        }).execute()
+                        st.cache_data.clear()
+                        st.success(f"✅ Producto '{n_p}' registrado correctamente.")
+                        st.rerun()
 
-    # ELIMINAR PRODUCTO
-    with subtab_prod_del:
-        prods_del = [p for p in CATALOGO.keys() if p != "Personalizado (Medida Libre)"]
-        if prods_del:
-            p_del = st.selectbox("Producto a eliminar:", prods_del)
-            if st.button("Eliminar Definitivamente", key="btn_del_prod"):
-                supabase.table("catalogo").delete().eq("nombre", p_del).execute()
-                st.success("Producto eliminado")
-                st.rerun()
+        # 1.2 MODIFICAR PRODUCTO
+        with prod_edit_tab:
+            st.markdown("### ✏️ Editar Parámetros de Producto Existente")
+            lista_prods_edit = [p for p in CATALOGO.keys() if p != "Personalizado (Medida Libre)"]
+            
+            if lista_prods_edit:
+                p_edit_sel = st.selectbox("Selecciona el producto a editar:", lista_prods_edit, key="sel_edit_prod")
+                dados_edit = CATALOGO[p_edit_sel]
+                
+                with st.form("form_edit_prod"):
+                    col_pe1, col_pe2 = st.columns(2)
+                    l_edit = col_pe1.number_input("Nuevo Largo (cm):", value=float(dados_edit["largo"]), min_value=0.1, step=0.5)
+                    a_edit = col_pe2.number_input("Nuevo Ancho (cm):", value=float(dados_edit["ancho"]), min_value=0.1, step=0.5)
+                    t_edit = col_pe1.number_input("Nuevo Tiempo (min):", value=float(dados_edit["tiempo"]), min_value=0.1, step=0.5)
+                    
+                    mat_keys = list(precios_materiales.keys())
+                    m_idx = mat_keys.index(dados_edit["material"]) if dados_edit["material"] in mat_keys else 0
+                    m_edit = col_pe2.selectbox("Nuevo Material Default:", mat_keys, index=m_idx)
+                    
+                    foto_up_edit = st.file_uploader("Reemplazar Imagen (Opcional):", type=["jpg", "png", "jpeg"], key="up_edit_img")
+                    
+                    btn_save_edit = st.form_submit_button("💾 Actualizar Producto", type="primary", use_container_width=True)
+                    
+                    if btn_save_edit:
+                        foto_url_final = dados_edit.get("foto")
+                        if foto_up_edit:
+                            file_ext = foto_up_edit.name.split(".")[-1]
+                            file_path = f"{p_edit_sel.strip().lower().replace(' ', '_')}.{file_ext}"
+                            file_bytes = foto_up_edit.getvalue()
+                            
+                            supabase.storage.from_("productos_img").upload(
+                                file_path, file_bytes, {"content-type": foto_up_edit.type, "x-upsert": "true"}
+                            )
+                            foto_url_final = supabase.storage.from_("productos_img").get_public_url(file_path)
+
+                        supabase.table("catalogo").update({
+                            "largo": l_edit, "ancho": a_edit, 
+                            "tiempo": t_edit, "material": m_edit, "foto_url": foto_url_final
+                        }).eq("nombre", p_edit_sel).execute()
+                        
+                        st.cache_data.clear()
+                        st.success(f"✅ Producto '{p_edit_sel}' actualizado.")
+                        st.rerun()
+            else:
+                st.info("💡 No hay productos en el catálogo para editar.")
+
+        # 1.3 ELIMINAR PRODUCTO
+        with prod_del_tab:
+            st.markdown("### 🗑️ Dar de Baja Producto")
+            prods_del = [p for p in CATALOGO.keys() if p != "Personalizado (Medida Libre)"]
+            
+            if prods_del:
+                p_del = st.selectbox("Selecciona producto a eliminar permanentemente:", prods_del, key="sel_del_prod")
+                st.warning(f"⚠️ ¿Estás seguro de que deseas eliminar '{p_del}'? Esta acción no se puede deshacer.")
+                
+                if st.button("❌ Confirmar y Eliminar Producto", type="primary", key="btn_del_prod_confirm"):
+                    supabase.table("catalogo").delete().eq("nombre", p_del).execute()
+                    st.cache_data.clear()
+                    st.success(f"✅ Producto '{p_del}' eliminado del catálogo.")
+                    st.rerun()
+            else:
+                st.info("💡 No hay productos en el catálogo para eliminar.")
+
+    # ==========================================
+    # SUB-PESTAÑA 2: MATERIALES
+    # ==========================================
+    with main_admin_tab2:
+        mat_add_tab, mat_edit_tab, mat_del_tab = st.tabs([
+            "➕ Agregar Material", 
+            "✏️ Modificar Material", 
+            "🗑️ Eliminar Material"
+        ])
+        
+        # 2.1 AGREGAR MATERIAL
+        with mat_add_tab:
+            st.markdown("### ➕ Registrar Nuevo Material / Placa")
+            with st.form("form_add_mat"):
+                nom_m = st.text_input("Nombre del Material:", placeholder="Ej. MDF 3mm Premium")
+                col_m1, col_m2, col_m3 = st.columns(3)
+                p_m = col_m1.number_input("Precio Placa Completa ($):", value=120.0, min_value=1.0, step=5.0)
+                l_m = col_m2.number_input("Largo Placa (cm):", value=122.0, min_value=1.0, step=1.0)
+                a_m = col_m3.number_input("Ancho Placa (cm):", value=244.0, min_value=1.0, step=1.0)
+                
+                btn_add_m = st.form_submit_button("✨ Guardar Material", type="primary", use_container_width=True)
+                
+                if btn_add_m:
+                    if not nom_m.strip():
+                        st.error("❌ El nombre del material no puede estar vacío.")
+                    else:
+                        c_cm2 = p_m / (l_m * a_m)
+                        supabase.table("materiales").insert({"nombre": nom_m.strip(), "costo_cm2": c_cm2}).execute()
+                        st.cache_data.clear()
+                        st.success(f"✅ Material '{nom_m}' registrado con costo de ${c_cm2:.4f}/cm².")
+                        st.rerun()
+
+        # 2.2 MODIFICAR MATERIAL
+        with mat_edit_tab:
+            st.markdown("### ✏️ Actualizar Precios de Placa")
+            mat_list = list(precios_materiales.keys())
+            
+            if mat_list:
+                mat_edit_sel = st.selectbox("Selecciona material a actualizar:", mat_list, key="sel_edit_mat")
+                c_cm2_actual = precios_materiales[mat_edit_sel]
+                st.caption(f"Costo por cm² actual: **${c_cm2_actual:.4f} MXN**")
+                
+                with st.form("form_edit_mat"):
+                    col_me1, col_me2, col_me3 = st.columns(3)
+                    p_m_edit = col_me1.number_input("Nuevo Precio Placa ($):", value=150.0, min_value=1.0, step=5.0)
+                    l_m_edit = col_me2.number_input("Largo Placa (cm):", value=122.0, min_value=1.0, step=1.0)
+                    a_m_edit = col_me3.number_input("Ancho Placa (cm):", value=244.0, min_value=1.0, step=1.0)
+                    
+                    btn_save_mat_edit = st.form_submit_button("💾 Recalcular y Actualizar Costo", type="primary", use_container_width=True)
+                    
+                    if btn_save_mat_edit:
+                        nuevo_c_cm2 = p_m_edit / (l_m_edit * a_m_edit)
+                        supabase.table("materiales").update({"costo_cm2": nuevo_c_cm2}).eq("nombre", mat_edit_sel).execute()
+                        st.cache_data.clear()
+                        st.success(f"✅ Material '{mat_edit_sel}' actualizado a ${nuevo_c_cm2:.4f}/cm².")
+                        st.rerun()
+            else:
+                st.info("💡 No hay materiales registrados.")
+
+        # 2.3 ELIMINAR MATERIAL
+        with mat_del_tab:
+            st.markdown("### 🗑️ Eliminar Material del Sistema")
+            mat_list_del = list(precios_materiales.keys())
+            
+            if mat_list_del:
+                mat_del = st.selectbox("Selecciona material a eliminar:", mat_list_del, key="sel_del_mat")
+                st.warning(f"⚠️ ¿Eliminar '{mat_del}'? Los productos que usen este material deberán ser reasignados.")
+                
+                if st.button("❌ Confirmar y Eliminar Material", type="primary", key="btn_del_mat_confirm"):
+                    supabase.table("materiales").delete().eq("nombre", mat_del).execute()
+                    st.cache_data.clear()
+                    st.success(f"✅ Material '{mat_del}' eliminado.")
+                    st.rerun()
+            else:
+                st.info("💡 No hay materiales registrados para eliminar.")
