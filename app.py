@@ -342,11 +342,11 @@ with tab_cotizador:
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    col_act1, col_act2, col_act3 = st.columns(3)
+    # BOTONES DE ACCIÓN (Añadido Botón de Limpiar / Nueva Cotización)
+    col_act1, col_act2, col_act3, col_act4 = st.columns(4)
+    
     with col_act1:
         cliente_txt = nombre_cliente.strip() if nombre_cliente.strip() else "Cliente"
-        
-        # Texto adicional para el descuento y foto en WhatsApp
         desc_msg = f"🎉 *¡Incluye {int(descuento_pct * 100)}% de descuento por mayoreo!*\n" if descuento_pct > 0 else ""
         foto_msg = f"🖼️ *Vista previa:* {datos_prod['foto']}\n" if datos_prod.get("foto") else ""
 
@@ -380,7 +380,7 @@ with tab_cotizador:
             "total": precio_total_neto
         })
         st.download_button(
-            label="📄 Descargar PDF Formal",
+            label="📄 Descargar PDF",
             data=pdf_bytes,
             file_name=f"Cotizacion_{cliente_txt.replace(' ', '_')}.pdf",
             mime="application/pdf",
@@ -388,7 +388,7 @@ with tab_cotizador:
         )
 
     with col_act3:
-        if st.button("💾 Guardar en Historial", use_container_width=True, key="btn_save_cot"):
+        if st.button("💾 Guardar", use_container_width=True, key="btn_save_cot"):
             data_cot = {
                 "cliente": nombre_cliente.strip() if nombre_cliente.strip() else "General",
                 "telefono": telefono_cliente.strip(),
@@ -401,6 +401,16 @@ with tab_cotizador:
             supabase.table("historial_cotizaciones").insert(data_cot).execute()
             st.toast("¡Cotización guardada exitosamente!", icon="✅")
             st.success("✅ Cotización registrada.")
+
+    with col_act4:
+        if st.button("🧹 Nueva Cotización", use_container_width=True, key="btn_new_cot"):
+            st.session_state["clon_cliente"] = ""
+            st.session_state["clon_telefono"] = ""
+            st.session_state["clon_producto"] = "Personalizado (Medida Libre)"
+            st.session_state["clon_material"] = list(precios_materiales.keys())[0] if precios_materiales else ""
+            st.session_state["clon_cantidad"] = 1
+            st.toast("Formulario restablecido", icon="🧹")
+            st.rerun()
 
 # ------------------------------------------
 # TAB 2: HISTORIAL Y DUPLICACIÓN DE COTIZACIONES
