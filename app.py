@@ -82,13 +82,11 @@ def generar_pdf_cotizacion(datos_pdf):
     elements = []
     styles = getSampleStyleSheet()
 
-    # Estilos personalizados
     title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=20, textColor=colors.HexColor('#1E88E5'))
     subtitle_style = ParagraphStyle('SubTitleStyle', parent=styles['Normal'], fontName='Helvetica', fontSize=10, textColor=colors.HexColor('#666666'))
     body_style = ParagraphStyle('BodyStyle', parent=styles['Normal'], fontName='Helvetica', fontSize=10, textColor=colors.HexColor('#333333'))
     bold_style = ParagraphStyle('BoldStyle', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=10, textColor=colors.HexColor('#333333'))
 
-    # Encabezado
     header_data = [
         [
             Paragraph("<b>Z&A TALLER CREATIVO</b><br/>Corte & Grabado Láser CNC<br/>Contacto: taller@zataller.com", title_style),
@@ -100,7 +98,6 @@ def generar_pdf_cotizacion(datos_pdf):
     elements.append(header_table)
     elements.append(Spacer(1, 15))
 
-    # Datos Cliente
     cliente_info = [
         [Paragraph(f"<b>Cliente:</b> {datos_pdf['cliente']}", body_style), Paragraph(f"<b>Teléfono:</b> {datos_pdf['telefono']}", body_style)]
     ]
@@ -108,12 +105,10 @@ def generar_pdf_cotizacion(datos_pdf):
     info_table.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F0F2F6')),
         ('PADDING', (0,0), (-1,-1), 8),
-        ('CORNERPAD', (0,0), (-1,-1), 4)
     ]))
     elements.append(info_table)
     elements.append(Spacer(1, 15))
 
-    # Tabla de Detalle del Pedido
     table_data = [
         ["Producto", "Material", "Dimensiones", "Cantidad", "Precio Unitario", "Total"],
         [
@@ -121,8 +116,8 @@ def generar_pdf_cotizacion(datos_pdf):
             datos_pdf['material'],
             f"{datos_pdf['largo']:.1f} x {datos_pdf['ancho']:.1f} cm",
             str(datos_pdf['cantidad']),
-            f"${datos_pdf['precio_unitario']:.2f} MXN",
-            f"${datos_pdf['total']:.2f} MXN"
+            f"${datos_pdf['precio_unitario']:,.2f} MXN",
+            f"${datos_pdf['total']:,.2f} MXN"
         ]
     ]
 
@@ -140,16 +135,14 @@ def generar_pdf_cotizacion(datos_pdf):
     elements.append(prod_table)
     elements.append(Spacer(1, 20))
 
-    # Total y Notas
     total_data = [
-        ["", Paragraph(f"<b>TOTAL A PAGAR:</b> <font color='#1E88E5' size='12'><b>${datos_pdf['total']:.2f} MXN</b></font>", bold_style)]
+        ["", Paragraph(f"<b>TOTAL A PAGAR:</b> <font color='#1E88E5' size='12'><b>${datos_pdf['total']:,.2f} MXN</b></font>", bold_style)]
     ]
     total_table = Table(total_data, colWidths=[300, 240])
     total_table.setStyle(TableStyle([('ALIGN', (1,0), (1,0), 'RIGHT')]))
     elements.append(total_table)
     elements.append(Spacer(1, 30))
 
-    # Pie de página
     elements.append(Paragraph("<i>¡Gracias por su preferencia! Quedamos a sus órdenes para cualquier ajuste en su proyecto.</i>", subtitle_style))
 
     doc.build(elements)
@@ -244,7 +237,6 @@ with tab_cotizador:
 
     col_cat, col_inputs = st.columns([1, 1.2])
 
-    # Cargar valores si fueron clonados desde el Historial
     c_cliente = st.session_state.get("clon_cliente", "")
     c_tel = st.session_state.get("clon_telefono", "")
     c_prod = st.session_state.get("clon_producto", None)
@@ -304,10 +296,10 @@ with tab_cotizador:
     st.markdown("---")
     
     res_col1, res_col2, res_col3, res_col4 = st.columns(4)
-    res_col1.metric("Costo Producción (1 pz)", f"${costo_prod_unitario:.2f} MXN")
-    res_col2.metric("Precio Base (1 pz)", f"${precio_unitario_base:.2f} MXN")
+    res_col1.metric("Costo Producción (1 pz)", f"${costo_prod_unitario:,.2f} MXN")
+    res_col2.metric("Precio Base (1 pz)", f"${precio_unitario_base:,.2f} MXN")
     res_col3.metric("Descuento Mayoreo", f"{int(descuento_pct * 100)}%")
-    res_col4.metric("PRECIO TOTAL", f"${precio_total_neto:.2f} MXN", delta=f"{cantidad} pieza(s)")
+    res_col4.metric("PRECIO TOTAL", f"${precio_total_neto:,.2f} MXN", delta=f"{cantidad} pieza(s)")
 
     with st.expander("🔍 **Ver Desglose Técnico & Estructura de Costos Interfaz**", expanded=False):
         st.markdown("### 📊 Análisis Detallado de Cotización")
@@ -316,11 +308,11 @@ with tab_cotizador:
             st.markdown(f"""
             <div class='card-tech'>
                 <h4>🪵 Materia Prima</h4>
-                <div class='tech-row'><span>Área Real:</span> <b>{area_bruta:.1f} cm²</b></div>
-                <div class='tech-row'><span>Área (+10% Merma):</span> <b>{area_con_merma:.1f} cm²</b></div>
-                <div class='tech-row'><span>Costo cm²:</span> <b>${costo_cm2:.4f} MXN</b></div>
+                <div class='tech-row'><span>Área Real:</span> <b>{area_bruta:,.1f} cm²</b></div>
+                <div class='tech-row'><span>Área (+10% Merma):</span> <b>{area_con_merma:,.1f} cm²</b></div>
+                <div class='tech-row'><span>Costo cm²:</span> <b>${costo_cm2:,.4f} MXN</b></div>
                 <hr style='margin: 8px 0;'>
-                <div class='tech-row'><span>Subtotal Material (1 pz):</span> <b style='color:#2E7D32;'>${costo_mat_unitario:.2f} MXN</b></div>
+                <div class='tech-row'><span>Subtotal Material (1 pz):</span> <b style='color:#2E7D32;'>${costo_mat_unitario:,.2f} MXN</b></div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -328,11 +320,11 @@ with tab_cotizador:
             st.markdown(f"""
             <div class='card-tech'>
                 <h4>⚡ Operación & Maquinado CNC</h4>
-                <div class='tech-row'><span>Tiempo Estimado:</span> <b>{tiempo:.1f} min</b></div>
-                <div class='tech-row'><span>Tarifa Láser:</span> <b>${tarifa_minuto:.2f} / min</b></div>
-                <div class='tech-row'><span>Tiempo Total Lote:</span> <b>{(tiempo * cantidad):.1f} min</b></div>
+                <div class='tech-row'><span>Tiempo Estimado:</span> <b>{tiempo:,.1f} min</b></div>
+                <div class='tech-row'><span>Tarifa Láser:</span> <b>${tarifa_minuto:,.2f} / min</b></div>
+                <div class='tech-row'><span>Tiempo Total Lote:</span> <b>{(tiempo * cantidad):,.1f} min</b></div>
                 <hr style='margin: 8px 0;'>
-                <div class='tech-row'><span>Subtotal Máquina (1 pz):</span> <b style='color:#2E7D32;'>${costo_maq_unitario:.2f} MXN</b></div>
+                <div class='tech-row'><span>Subtotal Máquina (1 pz):</span> <b style='color:#2E7D32;'>${costo_maq_unitario:,.2f} MXN</b></div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -341,10 +333,10 @@ with tab_cotizador:
             <div class='card-tech'>
                 <h4>📈 Márgenes y Rendimiento Lote</h4>
                 <div class='tech-row'><span>Margen Utilidad:</span> <b>{int(utilidad_porcentaje * 100)}%</b></div>
-                <div class='tech-row'><span>Costo Total Lote:</span> <b>${costo_total_lote:.2f} MXN</b></div>
+                <div class='tech-row'><span>Costo Total Lote:</span> <b>${costo_total_lote:,.2f} MXN</b></div>
                 <div class='tech-row'><span>Descuento Aplicado:</span> <b>{int(descuento_pct * 100)}%</b></div>
                 <hr style='margin: 8px 0;'>
-                <div class='tech-row'><span>Ganancia Neta Estimada:</span> <b style='color:#1565C0;'>${utilidad_total_lote:.2f} MXN</b></div>
+                <div class='tech-row'><span>Ganancia Neta Estimada:</span> <b style='color:#1565C0;'>${utilidad_total_lote:,.2f} MXN</b></div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -353,15 +345,22 @@ with tab_cotizador:
     col_act1, col_act2, col_act3 = st.columns(3)
     with col_act1:
         cliente_txt = nombre_cliente.strip() if nombre_cliente.strip() else "Cliente"
+        
+        # Texto adicional para el descuento y foto en WhatsApp
+        desc_msg = f"🎉 *¡Incluye {int(descuento_pct * 100)}% de descuento por mayoreo!*\n" if descuento_pct > 0 else ""
+        foto_msg = f"🖼️ *Vista previa:* {datos_prod['foto']}\n" if datos_prod.get("foto") else ""
+
         msg_wa = (
             f"Hola *{cliente_txt}* 👋\n\n"
             f"Te comparto la cotización de tu pedido de *Z&A Taller Creativo*:\n"
             f"📌 *Producto:* {producto_sel}\n"
-            f"📐 *Medidas:* {largo:.1f} x {ancho:.1f} cm\n"
+            f"{foto_msg}"
+            f"📐 *Medidas:* {largo:,.1f} x {ancho:,.1f} cm\n"
             f"🪵 *Material:* {material}\n"
             f"📦 *Cantidad:* {cantidad} pieza(s)\n"
-            f"💵 *Precio Unitario:* ${precio_unitario_final:.2f} MXN\n"
-            f"💰 *TOTAL A COBRAR:* *${precio_total_neto:.2f} MXN*\n\n"
+            f"{desc_msg}"
+            f"💵 *Precio Unitario:* ${precio_unitario_final:,.2f} MXN\n"
+            f"💰 *TOTAL A COBRAR:* *${precio_total_neto:,.2f} MXN*\n\n"
             f"_Cotización válida por 15 días. ¡Quedo atento a tus comentarios!_"
         )
         tel_clean = "".join(filter(str.isdigit, telefono_cliente))
@@ -369,7 +368,6 @@ with tab_cotizador:
         st.link_button("📲 Enviar por WhatsApp", wa_url, type="primary", use_container_width=True)
 
     with col_act2:
-        # EXPORTACIÓN A PDF
         pdf_bytes = generar_pdf_cotizacion({
             "cliente": cliente_txt,
             "telefono": telefono_cliente.strip() if telefono_cliente.strip() else "N/A",
@@ -639,7 +637,7 @@ with tab_admin:
                         c_cm2 = p_m / (l_m * a_m)
                         supabase.table("materiales").insert({"nombre": nom_m.strip(), "costo_cm2": c_cm2}).execute()
                         st.cache_data.clear()
-                        st.toast(f"Material '{nom_m}' agregado con costo de ${c_cm2:.4f}/cm²", icon="🪵")
+                        st.toast(f"Material '{nom_m}' agregado con costo de ${c_cm2:,.4f}/cm²", icon="🪵")
                         st.success(f"✅ Material '{nom_m}' registrado.")
                         time.sleep(1.2)
                         st.rerun()
@@ -651,7 +649,7 @@ with tab_admin:
             if mat_list:
                 mat_edit_sel = st.selectbox("Selecciona material a actualizar:", mat_list, key="sel_edit_mat")
                 c_cm2_actual = precios_materiales[mat_edit_sel]
-                st.caption(f"Costo por cm² actual: **${c_cm2_actual:.4f} MXN**")
+                st.caption(f"Costo por cm² actual: **${c_cm2_actual:,.4f} MXN**")
                 
                 with st.form("form_edit_mat"):
                     col_me1, col_me2, col_me3 = st.columns(3)
@@ -665,7 +663,7 @@ with tab_admin:
                         nuevo_c_cm2 = p_m_edit / (l_m_edit * a_m_edit)
                         supabase.table("materiales").update({"costo_cm2": nuevo_c_cm2}).eq("nombre", mat_edit_sel).execute()
                         st.cache_data.clear()
-                        st.toast(f"Material '{mat_edit_sel}' actualizado a ${nuevo_c_cm2:.4f}/cm²", icon="✏️")
+                        st.toast(f"Material '{mat_edit_sel}' actualizado a ${nuevo_c_cm2:,.4f}/cm²", icon="✏️")
                         st.success(f"✅ Material '{mat_edit_sel}' actualizado.")
                         time.sleep(1.2)
                         st.rerun()
