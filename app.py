@@ -7,7 +7,7 @@ import io
 from PIL import Image
 from supabase import create_client, Client
 from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
@@ -61,12 +61,16 @@ def cargar_historial():
     if res.data:
         df = pd.DataFrame(res.data)
         df["fecha"] = pd.to_datetime(df["fecha"]).dt.strftime("%Y-%m-%d %H:%M")
+        
+        # Mapear URL de imagen desde el catálogo según el nombre del producto
+        df["Imagen"] = df["producto"].map(lambda p: CATALOGO.get(p, {}).get("foto", None))
+
         df.rename(columns={
             "fecha": "Fecha", "cliente": "Cliente", "telefono": "Teléfono",
             "producto": "Producto", "material": "Material", "cantidad": "Cantidad",
             "precio_unitario": "Precio Unitario", "total_cobrado": "Total Cobrado"
         }, inplace=True)
-        return df[["id", "Fecha", "Cliente", "Teléfono", "Producto", "Material", "Cantidad", "Precio Unitario", "Total Cobrado"]]
+        return df[["id", "Imagen", "Fecha", "Cliente", "Teléfono", "Producto", "Material", "Cantidad", "Precio Unitario", "Total Cobrado"]]
     return pd.DataFrame()
 
 # Carga inicial
@@ -237,24 +241,17 @@ with tab_cotizador:
 
     col_cat, col_inputs = st.columns([1, 1.2])
 
-    c_cliente = st.session_state.get("clon_cliente", "")
-    c_tel = st.session_state.get("clon_telefono", "")
-    c_prod = st.session_state.get("clon_producto", None)
-    c_mat = st.session_state.get("clon_material", None)
-    c_cant = st.session_state.get("clon_cantidad", 1)
-
     with col_cat:
         st.subheader("🖼️ Producto & Datos Cliente")
-        nombre_cliente = st.text_input("Nombre del Cliente:", value=c_cliente, placeholder="Ej. Juan Pérez")
-        telefono_cliente = st.text_input("Teléfono WhatsApp (opcional):", value=c_tel, placeholder="Ej. 4421234567")
+        nombre_cliente = st.text_input("Nombre del Cliente:", placeholder="Ej. Juan Pérez")
+        telefono_cliente = st.text_input("Teléfono WhatsApp (opcional):", placeholder="Ej. 4421234567")
         
         lista_productos = list(CATALOGO.keys())
         if "Personalizado (Medida Libre)" in lista_productos:
             lista_productos.remove("Personalizado (Medida Libre)")
             lista_productos.insert(0, "Personalizado (Medida Libre)")
 
-        idx_prod = lista_productos.index(c_prod) if c_prod in lista_productos else 0
-        producto_sel = st.selectbox("Elige un producto del catálogo:", lista_productos, index=idx_prod)        
+        producto_sel = st.selectbox("Elige un producto del catálogo:", lista_productos)        
         datos_prod = CATALOGO[producto_sel]
         
         if datos_prod.get("foto"):
@@ -265,7 +262,7 @@ with tab_cotizador:
     with col_inputs:
         st.subheader("📏 Dimensiones y Tiempos")
         mat_keys = list(precios_materiales.keys())
-        mat_def = c_mat if (c_mat in mat_keys) else datos_prod["material"]
+        mat_def = datos_prod["material"]
         mat_index = mat_keys.index(mat_def) if mat_def in mat_keys else 0
         material = st.selectbox("Material:", mat_keys, index=mat_index)
         
@@ -275,7 +272,7 @@ with tab_cotizador:
             
         col_t, col_c = st.columns(2)
         tiempo = col_t.number_input("Tiempo Láser por Pieza (min):", value=float(datos_prod["tiempo"]), min_value=0.1, step=0.5)
-        cantidad = col_c.number_input("Cantidad Pedida (piezas):", value=int(c_cant), min_value=1, step=1)
+        cantidad = col_c.number_input("Cantidad Pedida (piezas):", value=1, min_value=1, step=1)
 
     area_bruta = largo * ancho
     area_con_merma = area_bruta * desperdicio_factor
@@ -346,7 +343,6 @@ with tab_cotizador:
     with col_act1:
         cliente_txt = nombre_cliente.strip() if nombre_cliente.strip() else "Cliente"
         
-        # Texto adicional para el descuento y foto en WhatsApp
         desc_msg = f"🎉 *¡Incluye {int(descuento_pct * 100)}% de descuento por mayoreo!*\n" if descuento_pct > 0 else ""
         foto_msg = f"🖼️ *Vista previa:* {datos_prod['foto']}\n" if datos_prod.get("foto") else ""
 
@@ -403,7 +399,7 @@ with tab_cotizador:
             st.success("✅ Cotización registrada.")
 
 # ------------------------------------------
-# TAB 2: HISTORIAL Y DUPLICACIÓN DE COTIZACIONES
+# TAB 2: HISTORIAL DE COTIZACIONES
 # ------------------------------------------
 with tab_historial:
     st.header("📋 Historial de Cotizaciones Guardadas")
@@ -416,33 +412,7 @@ with tab_historial:
         h_col3.metric("Promedio por Venta", f"${df_historial['Total Cobrado'].mean():,.2f} MXN")
         st.markdown("---")
 
-        st.subheader("🔄 Duplicar o Reutilizar una Cotización Pasada")
-        col_clone1, col_clone2 = st.columns([3, 1])
-        
-        with col_clone1:
-            opciones_hist = [
-                f"ID #{row['id']} | {row['Cliente']} - {row['Producto']} ({row['Cantidad']} pzs)" 
-                for _, row in df_historial.iterrows()
-            ]
-            cot_seleccionada = st.selectbox("Selecciona una cotización anterior para recargar en el cotizador:", opciones_hist)
-            
-        with col_clone2:
-            st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("🔄 Cargar al Cotizador", type="primary", use_container_width=True):
-                id_sel = int(cot_seleccionada.split("ID #")[1].split(" |")[0])
-                fila_sel = df_historial[df_historial["id"] == id_sel].iloc[0]
-                
-                st.session_state["clon_cliente"] = str(fila_sel["Cliente"])
-                st.session_state["clon_telefono"] = str(fila_sel["Teléfono"]) if pd.notnull(fila_sel["Teléfono"]) else ""
-                st.session_state["clon_producto"] = str(fila_sel["Producto"])
-                st.session_state["clon_material"] = str(fila_sel["Material"])
-                st.session_state["clon_cantidad"] = int(fila_sel["Cantidad"])
-                
-                st.toast(f"Cotización #{id_sel} cargada en el cotizador", icon="🚀")
-                st.rerun()
-
-        st.markdown("---")
-        st.subheader("✏️ Edición Directa del Historial")
+        st.subheader("✏️ Registro de Cotizaciones")
 
         df_editado = st.data_editor(
             df_historial,
@@ -451,7 +421,12 @@ with tab_historial:
             key="editor_historial",
             column_config={
                 "id": None,
-                "Fecha": st.column_config.TextColumn("Fecha", disabled=True)
+                "Imagen": st.column_config.ImageColumn(
+                    "Vista Previa", help="Foto del producto registrada en catálogo", width="small"
+                ),
+                "Fecha": st.column_config.TextColumn("Fecha", disabled=True),
+                "Precio Unitario": st.column_config.NumberFormat("Precio Unitario", format="$%.2f"),
+                "Total Cobrado": st.column_config.NumberFormat("Total Cobrado", format="$%.2f")
             }
         )
 
