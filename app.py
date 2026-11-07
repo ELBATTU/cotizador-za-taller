@@ -62,15 +62,17 @@ def cargar_historial():
         df = pd.DataFrame(res.data)
         df["fecha"] = pd.to_datetime(df["fecha"]).dt.strftime("%Y-%m-%d %H:%M")
         
-        # Mapear URL de imagen desde el catálogo según el nombre del producto
-        df["Imagen"] = df["producto"].map(lambda p: CATALOGO.get(p, {}).get("foto", None))
-
+        # Mapear URL de foto desde el catálogo actual por nombre de producto
+        cat_dict = cargar_catalogo()
+        df["foto_url"] = df["producto"].map(lambda p: cat_dict.get(p, {}).get("foto"))
+        
         df.rename(columns={
             "fecha": "Fecha", "cliente": "Cliente", "telefono": "Teléfono",
             "producto": "Producto", "material": "Material", "cantidad": "Cantidad",
-            "precio_unitario": "Precio Unitario", "total_cobrado": "Total Cobrado"
+            "precio_unitario": "Precio Unitario", "total_cobrado": "Total Cobrado",
+            "foto_url": "Foto"
         }, inplace=True)
-        return df[["id", "Imagen", "Fecha", "Cliente", "Teléfono", "Producto", "Material", "Cantidad", "Precio Unitario", "Total Cobrado"]]
+        return df[["id", "Foto", "Fecha", "Cliente", "Teléfono", "Producto", "Material", "Cantidad", "Precio Unitario", "Total Cobrado"]]
     return pd.DataFrame()
 
 # Carga inicial
@@ -262,8 +264,7 @@ with tab_cotizador:
     with col_inputs:
         st.subheader("📏 Dimensiones y Tiempos")
         mat_keys = list(precios_materiales.keys())
-        mat_def = datos_prod["material"]
-        mat_index = mat_keys.index(mat_def) if mat_def in mat_keys else 0
+        mat_index = mat_keys.index(datos_prod["material"]) if datos_prod["material"] in mat_keys else 0
         material = st.selectbox("Material:", mat_keys, index=mat_index)
         
         col_l, col_a = st.columns(2)
@@ -412,18 +413,14 @@ with tab_historial:
         h_col3.metric("Promedio por Venta", f"${df_historial['Total Cobrado'].mean():,.2f} MXN")
         st.markdown("---")
 
-        st.subheader("✏️ Registro de Cotizaciones")
-
-       df_editado = st.data_editor(
+        df_editado = st.data_editor(
             df_historial,
             use_container_width=True,
             num_rows="dynamic",
             key="editor_historial",
             column_config={
                 "id": None,
-                "Imagen": st.column_config.ImageColumn(
-                    "Vista Previa", help="Foto del producto registrada en catálogo", width="small"
-                ),
+                "Foto": st.column_config.ImageColumn("Foto", help="Vista previa del producto en catálogo", width="small"),
                 "Fecha": st.column_config.TextColumn("Fecha", disabled=True),
                 "Precio Unitario": st.column_config.NumberColumn("Precio Unitario", format="$%.2f"),
                 "Total Cobrado": st.column_config.NumberColumn("Total Cobrado", format="$%.2f")
