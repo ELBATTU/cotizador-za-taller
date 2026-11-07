@@ -3,8 +3,10 @@ import pandas as pd
 import datetime
 import urllib.parse
 import time
+import os
 from PIL import Image
 from supabase import create_client, Client
+from fpdf import FPDF
 
 # Desactivar límite de píxeles para imágenes grandes
 Image.MAX_IMAGE_PIXELS = None
@@ -67,6 +69,68 @@ def cargar_historial():
 # Carga inicial
 precios_materiales = cargar_materiales()
 CATALOGO = cargar_catalogo()
+
+# ==========================================
+# FUNCIÓN GENERADORA DE PDF FORMAL
+# ==========================================
+class PDFCotización(FPDF):
+    def header(self):
+        self.set_font('Helvetica', 'B', 16)
+        self.set_text_color(30, 136, 229) # Azul #1E88E5
+        self.cell(0, 10, 'Z&A TALLER CREATIVO', 0, 1, 'L')
+        self.set_font('Helvetica', '', 10)
+        self.set_text_color(100, 100, 100)
+        self.cell(0, 5, 'Corte & Grabado Láser CNC - Cotización Formal', 0, 1, 'L')
+        self.ln(5)
+        self.set_draw_color(220, 220, 220)
+        self.line(10, 28, 200, 28)
+        self.ln(5)
+
+    def footer(self):
+        self.set_y(-20)
+        self.set_font('Helvetica', 'I', 8)
+        self.set_text_color(150, 150, 150)
+        self.cell(0, 5, 'Cotización válida por 15 días a partir de la fecha de emisión.', 0, 1, 'C')
+        self.cell(0, 5, f'Z&A Taller Creativo | WhatsApp: 4421234567 | Página {self.page_no()}', 0, 0, 'C')
+
+def generar_pdf_cotizacion(cliente, telefono, producto, material, largo, ancho, cantidad, precio_unitario, total):
+    pdf = PDFCotización()
+    pdf.add_page()
+    
+    # Datos de Encabezado / Cliente
+    pdf.set_font('Helvetica', 'B', 11)
+    pdf.set_text_color(50, 50, 50)
+    pdf.cell(100, 6, f"Cliente: {cliente}", 0, 0, 'L')
+    pdf.cell(90, 6, f"Fecha: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}", 0, 1, 'R')
+    if telefono:
+        pdf.cell(100, 6, f"Teléfono: {telefono}", 0, 1, 'L')
+    pdf.ln(5)
+    
+    # Tabla Detalle del Producto
+    pdf.set_fill_color(240, 242, 246)
+    pdf.set_font('Helvetica', 'B', 10)
+    pdf.cell(70, 8, 'Descripción del Producto', 1, 0, 'L', True)
+    pdf.cell(40, 8, 'Material', 1, 0, 'C', True)
+    pdf.cell(30, 8, 'Medidas (cm)', 1, 0, 'C', True)
+    pdf.cell(20, 8, 'Cant.', 1, 0, 'C', True)
+    pdf.cell(30, 8, 'P. Unitario', 1, 1, 'C', True)
+    
+    pdf.set_font('Helvetica', '', 10)
+    pdf.cell(70, 10, str(producto)[:32], 1, 0, 'L')
+    pdf.cell(40, 10, str(material)[:18], 1, 0, 'C')
+    pdf.cell(30, 10, f"{largo:.1f}x{ancho:.1f}", 1, 0, 'C')
+    pdf.cell(20, 10, str(cantidad), 1, 0, 'C')
+    pdf.cell(30, 10, f"${precio_unitario:.2f}", 1, 1, 'R')
+    
+    # Resumen de Totales
+    pdf.ln(5)
+    pdf.set_font('Helvetica', 'B', 12)
+    pdf.set_fill_color(30, 136, 229)
+    pdf.set_text_color(255, 255, 255)
+    pdf.cell(130, 10, '', 0, 0)
+    pdf.cell(60, 10, f"TOTAL: ${total:.2f} MXN", 0, 1, 'C', True)
+    
+    return bytes(pdf.output())
 
 # ==========================================
 # ESTILOS VISUALES CSS
@@ -159,24 +223,54 @@ tab_cotizador, tab_historial, tab_admin = st.tabs([
 # TAB 1: COTIZADOR INTERACTIVO
 # ------------------------------------------
 with tab_cotizador:
-    st.markdown("<h1 style='color: #1E88E5;'>Z&A Taller Creativo</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='font-size: 18px; color: #888;'>Cotizador Interactivo - Corte & Grabado Láser CNC</p>", unsafe_allow_html=True)
+    col_t1, col_t2 = st.columns([3, 1], vertical_alignment="center")
+    with col_t1:
+        st.markdown("<h1 style='color: #1E88E5; margin:0;'>Z&A Taller Creativo</h1>", unsafe_allow_html=True)
+        st.markdown("<p style='font-size: 18px; color: #888; margin:0;'>Cotizador Interactivo - Corte & Grabado Láser CNC</p>", unsafe_allow_html=True)
+    with col_t2:
+        # MEJORA 2: BOTÓN LIMPIAR FORMULARIO / NUEVA COTIZACIÓN
+        if st.button("🧹 Nueva Cotización", use_container_width=True, help="Reinicia los campos para un nuevo cliente"):
+            if "cot_duplicada" in st.session_state:
+                del st.session_state["cot_duplicada"]
+            st.toast("Formulario reiniciado para una nueva cotización", icon="🧹")
+            st.rerun()
+            
     st.markdown("---")
 
     col_cat, col_inputs = st.columns([1, 1.2])
 
+    # Manejo de estado por si se cargó una cotización del historial
+    cot_dup = st.session_state.get("cot_duplicada", {})
+
     with col_cat:
         st.subheader("🖼️ Producto & Datos Cliente")
-        nombre_cliente = st.text_input("Nombre del Cliente:", placeholder="Ej. Juan Pérez")
-        telefono_cliente = st.text_input("Teléfono WhatsApp (opcional):", placeholder="Ej. 4421234567")
+        val_cliente = cot_dup.get("cliente", "")
+        val_tel = cot_dup.get("telefono", "")
+        
+        nombre_cliente = st.text_input("Nombre del Cliente:", value=val_cliente, placeholder="Ej. Juan Pérez")
+        telefono_cliente = st.text_input("Teléfono WhatsApp (opcional):", value=val_tel, placeholder="Ej. 4421234567")
+        
+        # MEJORA 1: BUSCADOR O FILTRO EN EL CATÁLOGO
+        filtro_prod = st.text_input("🔍 Buscar Producto en Catálogo:", placeholder="Escribe para filtrar...")
         
         lista_productos = list(CATALOGO.keys())
         if "Personalizado (Medida Libre)" in lista_productos:
             lista_productos.remove("Personalizado (Medida Libre)")
             lista_productos.insert(0, "Personalizado (Medida Libre)")
 
-        producto_sel = st.selectbox("Elige un producto del catálogo:", lista_productos)        
-        datos_prod = CATALOGO[producto_sel]
+        if filtro_prod.strip():
+            lista_filtrada = [p for p in lista_productos if filtro_prod.lower() in p.lower()]
+            if not lista_filtrada:
+                lista_filtrada = ["Personalizado (Medida Libre)"]
+        else:
+            lista_filtrada = lista_productos
+
+        idx_prod = 0
+        if cot_dup.get("producto") in lista_filtrada:
+            idx_prod = lista_filtrada.index(cot_dup["producto"])
+
+        producto_sel = st.selectbox("Elige un producto del catálogo:", lista_filtrada, index=idx_prod)        
+        datos_prod = CATALOGO.get(producto_sel, {"largo": 10.0, "ancho": 10.0, "tiempo": 2.0, "material": list(precios_materiales.keys())[0], "foto": None})
         
         if datos_prod.get("foto"):
             st.image(datos_prod["foto"], caption=producto_sel, use_container_width=True)
@@ -186,16 +280,22 @@ with tab_cotizador:
     with col_inputs:
         st.subheader("📏 Dimensiones y Tiempos")
         mat_keys = list(precios_materiales.keys())
-        mat_index = mat_keys.index(datos_prod["material"]) if datos_prod["material"] in mat_keys else 0
+        mat_default = cot_dup.get("material", datos_prod.get("material"))
+        mat_index = mat_keys.index(mat_default) if mat_default in mat_keys else 0
         material = st.selectbox("Material:", mat_keys, index=mat_index)
         
+        val_largo = float(cot_dup.get("largo", datos_prod["largo"])) if cot_dup else float(datos_prod["largo"])
+        val_ancho = float(cot_dup.get("ancho", datos_prod["ancho"])) if cot_dup else float(datos_prod["ancho"])
+        val_tiempo = float(cot_dup.get("tiempo", datos_prod["tiempo"])) if cot_dup else float(datos_prod["tiempo"])
+        val_cant = int(cot_dup.get("cantidad", 1))
+
         col_l, col_a = st.columns(2)
-        largo = col_l.number_input("Largo (cm):", value=float(datos_prod["largo"]), min_value=1.0, step=1.0)
-        ancho = col_a.number_input("Ancho (cm):", value=float(datos_prod["ancho"]), min_value=1.0, step=1.0)
+        largo = col_l.number_input("Largo (cm):", value=val_largo, min_value=1.0, step=1.0)
+        ancho = col_a.number_input("Ancho (cm):", value=val_ancho, min_value=1.0, step=1.0)
             
         col_t, col_c = st.columns(2)
-        tiempo = col_t.number_input("Tiempo Láser por Pieza (min):", value=float(datos_prod["tiempo"]), min_value=0.1, step=0.5)
-        cantidad = col_c.number_input("Cantidad Pedida (piezas):", value=1, min_value=1, step=1)
+        tiempo = col_t.number_input("Tiempo Láser por Pieza (min):", value=val_tiempo, min_value=0.1, step=0.5)
+        cantidad = col_c.number_input("Cantidad Pedida (piezas):", value=val_cant, min_value=1, step=1)
 
     area_bruta = largo * ancho
     area_con_merma = area_bruta * desperdicio_factor
@@ -264,7 +364,7 @@ with tab_cotizador:
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    col_act1, col_act2 = st.columns(2)
+    col_act1, col_act2, col_act3 = st.columns(3)
     with col_act1:
         cliente_txt = nombre_cliente.strip() if nombre_cliente.strip() else "Cliente"
         msg_wa = (
@@ -280,10 +380,10 @@ with tab_cotizador:
         )
         tel_clean = "".join(filter(str.isdigit, telefono_cliente))
         wa_url = f"https://wa.me/{tel_clean}?text={urllib.parse.quote(msg_wa)}" if tel_clean else f"https://wa.me/?text={urllib.parse.quote(msg_wa)}"
-        st.link_button("📲 Enviar Cotización por WhatsApp", wa_url, type="primary", use_container_width=True)
+        st.link_button("📲 Enviar por WhatsApp", wa_url, type="primary", use_container_width=True)
 
     with col_act2:
-        if st.button("💾 Guardar Cotización en Historial", use_container_width=True, key="btn_save_cot"):
+        if st.button("💾 Guardar en Historial", use_container_width=True, key="btn_save_cot"):
             data_cot = {
                 "cliente": nombre_cliente.strip() if nombre_cliente.strip() else "General",
                 "telefono": telefono_cliente.strip(),
@@ -295,7 +395,28 @@ with tab_cotizador:
             }
             supabase.table("historial_cotizaciones").insert(data_cot).execute()
             st.toast("¡Cotización guardada exitosamente!", icon="✅")
-            st.success("✅ ¡Cotización guardada en Supabase!")
+            st.success("✅ Cotización guardada.")
+
+    with col_act3:
+        # MEJORA 4: EXPORTAR A PDF PROFESIONAL
+        pdf_bytes = generar_pdf_cotizacion(
+            cliente=nombre_cliente.strip() if nombre_cliente.strip() else "General",
+            telefono=telefono_cliente.strip(),
+            producto=producto_sel,
+            material=material,
+            largo=largo,
+            ancho=ancho,
+            cantidad=cantidad,
+            precio_unitario=precio_unitario_final,
+            total=precio_total_neto
+        )
+        st.download_button(
+            label="📄 Descargar Cotización PDF",
+            data=pdf_bytes,
+            file_name=f"Cotizacion_{nombre_cliente.strip() if nombre_cliente.strip() else 'ZA'}.pdf",
+            mime="application/pdf",
+            use_container_width=True
+        )
 
 # ------------------------------------------
 # TAB 2: HISTORIAL DE COTIZACIONES
@@ -311,6 +432,29 @@ with tab_historial:
         h_col3.metric("Promedio por Venta", f"${df_historial['Total Cobrado'].mean():,.2f} MXN")
         st.markdown("---")
 
+        # MEJORA 3: DUPLICAR COTIZACIÓN HISTÓRICA
+        st.subheader("🔄 Cargar o Reutilizar Cotización Anterior")
+        opciones_duplicado = [f"ID {row['id']} - {row['Cliente']} ({row['Producto']})" for _, row in df_historial.iterrows()]
+        cot_seleccionada = st.selectbox("Selecciona una cotización previa para volver a cargarla:", opciones_duplicado)
+        
+        if st.button("📋 Cargar esta Cotización al Cotizador", type="primary"):
+            id_sel = int(cot_seleccionada.split(" - ")[0].replace("ID ", ""))
+            row_sel = df_historial[df_historial["id"] == id_sel].iloc[0]
+            
+            st.session_state["cot_duplicada"] = {
+                "cliente": row_sel["Cliente"],
+                "telefono": row_sel["Teléfono"],
+                "producto": row_sel["Producto"],
+                "material": row_sel["Material"],
+                "cantidad": row_sel["Cantidad"]
+            }
+            st.toast(f"Cotización de {row_sel['Cliente']} cargada en el Cotizador", icon="📋")
+            st.success("✅ Datos cargados en la pestaña 'Cotizador Interactivo'.")
+            time.sleep(1)
+            st.rerun()
+
+        st.markdown("---")
+        st.subheader("📝 Edición Rápida de Historial")
         df_editado = st.data_editor(
             df_historial,
             use_container_width=True,
@@ -322,7 +466,7 @@ with tab_historial:
             }
         )
 
-        if st.button("💾 Guardar Cambios en Historial", type="primary", key="btn_save_hist"):
+        if st.button("💾 Guardar Cambios en Historial", key="btn_save_hist"):
             for _, row in df_editado.iterrows():
                 if pd.notnull(row["id"]):
                     supabase.table("historial_cotizaciones").update({
@@ -332,7 +476,7 @@ with tab_historial:
                         "precio_unitario": float(row["Precio Unitario"]),
                         "total_cobrado": float(row["Total Cobrado"])
                     }).eq("id", row["id"]).execute()
-            st.toast("Historial de cotizaciones actualizado correctamente", icon="📝")
+            st.toast("Historial actualizado correctamente", icon="📝")
             st.success("✅ Historial actualizado.")
             time.sleep(1)
             st.rerun()
@@ -405,7 +549,6 @@ with tab_admin:
                         }).execute()
                         st.cache_data.clear()
                         
-                        # Alerta visual
                         st.toast(f"Producto '{n_p}' registrado con éxito", icon="📦")
                         st.success(f"✅ Producto '{n_p}' registrado correctamente.")
                         time.sleep(1.2)
@@ -462,7 +605,6 @@ with tab_admin:
                         
                         st.cache_data.clear()
                         
-                        # Alerta visual
                         st.toast(f"Producto '{p_edit_sel}' actualizado correctamente", icon="✏️")
                         st.success(f"✅ Producto '{p_edit_sel}' actualizado.")
                         time.sleep(1.2)
@@ -493,7 +635,6 @@ with tab_admin:
                             
                     st.cache_data.clear()
                     
-                    # Alerta visual
                     st.toast(f"Producto '{p_del}' eliminado del catálogo", icon="🗑️")
                     st.success(f"✅ Producto '{p_del}' e imagen eliminados correctamente.")
                     time.sleep(1.2)
@@ -531,7 +672,6 @@ with tab_admin:
                         supabase.table("materiales").insert({"nombre": nom_m.strip(), "costo_cm2": c_cm2}).execute()
                         st.cache_data.clear()
                         
-                        # Alerta visual
                         st.toast(f"Material '{nom_m}' agregado con costo de ${c_cm2:.4f}/cm²", icon="🪵")
                         st.success(f"✅ Material '{nom_m}' registrado con costo de ${c_cm2:.4f}/cm².")
                         time.sleep(1.2)
@@ -560,7 +700,6 @@ with tab_admin:
                         supabase.table("materiales").update({"costo_cm2": nuevo_c_cm2}).eq("nombre", mat_edit_sel).execute()
                         st.cache_data.clear()
                         
-                        # Alerta visual
                         st.toast(f"Material '{mat_edit_sel}' actualizado a ${nuevo_c_cm2:.4f}/cm²", icon="✏️")
                         st.success(f"✅ Material '{mat_edit_sel}' actualizado a ${nuevo_c_cm2:.4f}/cm².")
                         time.sleep(1.2)
@@ -581,7 +720,6 @@ with tab_admin:
                     supabase.table("materiales").delete().eq("nombre", mat_del).execute()
                     st.cache_data.clear()
                     
-                    # Alerta visual
                     st.toast(f"Material '{mat_del}' eliminado del sistema", icon="🗑️")
                     st.success(f"✅ Material '{mat_del}' eliminado.")
                     time.sleep(1.2)
