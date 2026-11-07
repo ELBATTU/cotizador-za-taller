@@ -414,7 +414,7 @@ with tab_historial:
 
         st.subheader("✏️ Registro de Cotizaciones")
 
-        df_editado = st.data_editor(
+       df_editado = st.data_editor(
             df_historial,
             use_container_width=True,
             num_rows="dynamic",
@@ -425,8 +425,8 @@ with tab_historial:
                     "Vista Previa", help="Foto del producto registrada en catálogo", width="small"
                 ),
                 "Fecha": st.column_config.TextColumn("Fecha", disabled=True),
-                "Precio Unitario": st.column_config.NumberFormat("Precio Unitario", format="$%.2f"),
-                "Total Cobrado": st.column_config.NumberFormat("Total Cobrado", format="$%.2f")
+                "Precio Unitario": st.column_config.NumberColumn("Precio Unitario", format="$%.2f"),
+                "Total Cobrado": st.column_config.NumberColumn("Total Cobrado", format="$%.2f")
             }
         )
 
