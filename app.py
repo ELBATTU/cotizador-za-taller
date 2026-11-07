@@ -219,27 +219,44 @@ utilidad_porcentaje = st.sidebar.slider("% Utilidad deseada:", min_value=10, max
 desperdicio_factor = 1.10
 
 # ==========================================
-# PESTAÑAS DE NAVEGACIÓN
+# GESTIÓN DE PESTAÑAS (Usando radio o query_params / session_state para control de navegación)
 # ==========================================
-tab_cotizador, tab_historial, tab_admin = st.tabs([
-    "🧮 Cotizador Interactivo", 
-    "📋 Historial de Cotizaciones", 
-    "⚙️ Administración"
-])
+if "active_tab" not in st.session_state:
+    st.session_state["active_tab"] = 0
+
+# Selector visual de pestañas mediante st.radio controlado por session_state
+tabs_nombres = ["🧮 Cotizador Interactivo", "📋 Historial de Cotizaciones", "⚙️ Administración"]
+tab_seleccionada = st.radio("Navegación", tabs_nombres, index=st.session_state["active_tab"], horizontal=True, label_visibility="collapsed")
+
+# Sincronizar índice activo
+st.session_state["active_tab"] = tabs_nombres.index(tab_seleccionada)
+
+st.markdown("---")
 
 # ------------------------------------------
 # TAB 1: COTIZADOR INTERACTIVO
 # ------------------------------------------
-with tab_cotizador:
+if st.session_state["active_tab"] == 0:
     st.markdown("<h1 style='color: #1E88E5;'>Z&A Taller Creativo</h1>", unsafe_allow_html=True)
     st.markdown("<p style='font-size: 18px; color: #888;'>Cotizador Interactivo - Corte & Grabado Láser CNC</p>", unsafe_allow_html=True)
+    
+    # Botón para limpiar o iniciar cotización nueva
+    if st.button("🔄 Nueva Cotización (Limpiar Campos)", type="secondary"):
+        st.session_state["clon_cliente"] = ""
+        st.session_state["clon_telefono"] = ""
+        st.session_state["clon_producto"] = "Personalizado (Medida Libre)"
+        st.session_state["clon_material"] = list(precios_materiales.keys())[0] if precios_materiales else ""
+        st.session_state["clon_cantidad"] = 1
+        st.toast("Formulario reiniciado", icon="🔄")
+        st.rerun()
+
     st.markdown("---")
 
     col_cat, col_inputs = st.columns([1, 1.2])
 
     c_cliente = st.session_state.get("clon_cliente", "")
     c_tel = st.session_state.get("clon_telefono", "")
-    c_prod = st.session_state.get("clon_producto", None)
+    c_prod = st.session_state.get("clon_producto", "Personalizado (Medida Libre)")
     c_mat = st.session_state.get("clon_material", None)
     c_cant = st.session_state.get("clon_cantidad", 1)
 
@@ -346,7 +363,6 @@ with tab_cotizador:
     with col_act1:
         cliente_txt = nombre_cliente.strip() if nombre_cliente.strip() else "Cliente"
         
-        # Texto adicional para el descuento y foto en WhatsApp
         desc_msg = f"🎉 *¡Incluye {int(descuento_pct * 100)}% de descuento por mayoreo!*\n" if descuento_pct > 0 else ""
         foto_msg = f"🖼️ *Vista previa:* {datos_prod['foto']}\n" if datos_prod.get("foto") else ""
 
@@ -405,7 +421,7 @@ with tab_cotizador:
 # ------------------------------------------
 # TAB 2: HISTORIAL Y DUPLICACIÓN DE COTIZACIONES
 # ------------------------------------------
-with tab_historial:
+elif st.session_state["active_tab"] == 1:
     st.header("📋 Historial de Cotizaciones Guardadas")
     df_historial = cargar_historial()
     
@@ -438,7 +454,9 @@ with tab_historial:
                 st.session_state["clon_material"] = str(fila_sel["Material"])
                 st.session_state["clon_cantidad"] = int(fila_sel["Cantidad"])
                 
-                st.toast(f"Cotización #{id_sel} cargada en el cotizador", icon="🚀")
+                # Cambiar automáticamente a la pestaña del cotizador (índice 0)
+                st.session_state["active_tab"] = 0
+                st.toast(f"Cotización #{id_sel} cargada exitosamente", icon="🚀")
                 st.rerun()
 
         st.markdown("---")
@@ -475,7 +493,7 @@ with tab_historial:
 # ------------------------------------------
 # TAB 3: PANEL DE ADMINISTRACIÓN
 # ------------------------------------------
-with tab_admin:
+elif st.session_state["active_tab"] == 2:
     st.header("⚙️ Panel de Gestión del Taller")
     
     main_admin_tab1, main_admin_tab2 = st.tabs([
