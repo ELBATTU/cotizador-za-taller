@@ -1,5 +1,5 @@
 streamlit
 pandas
-pillow
 supabase
-fpdf2
+Pillow
+reportlab
