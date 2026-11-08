@@ -444,7 +444,7 @@ with tab_cotizador:
             st.success("✅ Cotización registrada.")
 
 # ------------------------------------------
-# TAB 2: HISTORIAL DE COTIZACIONES CON FILTROS Y EDICIÓN CONTROLADA
+# TAB 2: HISTORIAL DE COTIZACIONES CON FILTROS, DESCARGA Y EDICIÓN CONTROLADA
 # ------------------------------------------
 with tab_historial:
     st.header("📋 Historial de Cotizaciones Registradas")
@@ -484,6 +484,18 @@ with tab_historial:
         h_col2.metric("Monto Total Cotizado", f"${df_filtrado['Total Cobrado'].sum():,.2f} MXN")
         promedio_venta = df_filtrado['Total Cobrado'].mean() if len(df_filtrado) > 0 else 0.0
         h_col3.metric("Promedio por Venta", f"${promedio_venta:,.2f} MXN")
+
+        # BOTÓN PARA DESCARGAR REPORTE EN CSV RESPETANDO EL FILTRO
+        df_exportar = df_filtrado[["Fecha Cotización", "Fecha Captura", "Cliente", "Teléfono", "Producto", "Material", "Cantidad", "Precio Unitario", "Total Cobrado"]].copy()
+        csv_bytes = df_exportar.to_csv(index=False).encode('utf-8-sig')
+
+        st.download_button(
+            label=f"📥 Descargar Reporte Filtrado ({len(df_filtrado)} registros)",
+            data=csv_bytes,
+            file_name=f"Reporte_Cotizaciones_{filtro_tipo.replace(' ', '_')}.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
         
         st.markdown("---")
         st.markdown("### ✏️ Edición Controlada (Cliente, Teléfono y Fecha de Trato)")
@@ -520,7 +532,6 @@ with tab_historial:
                         "fecha_cotizacion": str(row["Fecha Cotización"])
                     }).eq("id", int(row["id"])).execute()
             
-            # 💡 SOLUCIÓN: Limpiar caché y forzar recarga automática inmediata
             st.cache_data.clear()
             st.toast("Historial actualizado correctamente", icon="📝")
             st.success("✅ Historial actualizado.")
