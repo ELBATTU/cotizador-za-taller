@@ -444,7 +444,7 @@ with tab_cotizador:
             st.success("✅ Cotización registrada.")
 
 # ------------------------------------------
-# TAB 2: HISTORIAL DE COTIZACIONES CON FILTROS Y EDICIÓN CONTROLADA
+# TAB 2: HISTORIAL DE COTIZACIONES CON FILTROS, DESCARGA Y EDICIÓN CONTROLADA
 # ------------------------------------------
 with tab_historial:
     st.header("📋 Historial de Cotizaciones Registradas")
@@ -484,12 +484,23 @@ with tab_historial:
         h_col2.metric("Monto Total Cotizado", f"${df_filtrado['Total Cobrado'].sum():,.2f} MXN")
         promedio_venta = df_filtrado['Total Cobrado'].mean() if len(df_filtrado) > 0 else 0.0
         h_col3.metric("Promedio por Venta", f"${promedio_venta:,.2f} MXN")
+
+        # BOTÓN PARA DESCARGAR REPORTE EN CSV RESPETANDO EL FILTRO
+        df_exportar = df_filtrado[["Fecha Cotización", "Fecha Captura", "Cliente", "Teléfono", "Producto", "Material", "Cantidad", "Precio Unitario", "Total Cobrado"]].copy()
+        csv_bytes = df_exportar.to_csv(index=False).encode('utf-8-sig')
+
+        st.download_button(
+            label=f"📥 Descargar Reporte Filtrado ({len(df_filtrado)} registros)",
+            data=csv_bytes,
+            file_name=f"Reporte_Cotizaciones_{filtro_tipo.replace(' ', '_')}.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
         
         st.markdown("---")
         st.markdown("### ✏️ Edición Controlada (Cliente, Teléfono y Fecha de Trato)")
         st.info("💡 Puedes modificar directamente en la tabla el **Nombre del Cliente**, **Teléfono** o la **Fecha Cotización** (por si capturas algo desfasado). Los montos y productos se mantienen protegidos por seguridad.")
 
-        # Preparamos dataframe limpio para edición controlada
         df_editable = df_filtrado[["id", "Foto", "Fecha Cotización", "Fecha Captura", "Cliente", "Teléfono", "Producto", "Material", "Cantidad", "Precio Unitario", "Total Cobrado"]].copy()
 
         df_editado = st.data_editor(
@@ -515,12 +526,13 @@ with tab_historial:
         if st.button("💾 Guardar Cambios en Historial", type="primary", key="btn_save_hist"):
             for _, row in df_editado.iterrows():
                 if pd.notnull(row["id"]):
-                    # Actualizamos únicamente campos de contacto y fecha de trato
                     supabase.table("historial_cotizaciones").update({
                         "cliente": row["Cliente"],
                         "telefono": row["Teléfono"],
                         "fecha_cotizacion": str(row["Fecha Cotización"])
                     }).eq("id", int(row["id"])).execute()
+            
+            st.cache_data.clear()
             st.toast("Historial actualizado correctamente", icon="📝")
             st.success("✅ Historial actualizado.")
             time.sleep(1)
