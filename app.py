@@ -88,26 +88,24 @@ def generar_pdf_cotizacion(datos_pdf):
     elements = []
     styles = getSampleStyleSheet()
 
-    # Colores corporativos exclusivos para el PDF
-    COLOR_PRINCIPAL = colors.HexColor('#5C3A21')  # Café madera oscuro
-    COLOR_SECUNDARIO = colors.HexColor('#8C5830') # Café claro / caramelo
-    COLOR_FONDO = colors.HexColor('#F4EAD5')      # Crema suave
-    COLOR_TEXTO = colors.HexColor('#2B1A0E')      # Texto café muy oscuro
+    COLOR_PRINCIPAL = colors.HexColor('#5C3A21')  
+    COLOR_SECUNDARIO = colors.HexColor('#8C5830') 
+    COLOR_FONDO = colors.HexColor('#F4EAD5')      
+    COLOR_TEXTO = colors.HexColor('#2B1A0E')      
 
     title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=16, textColor=COLOR_PRINCIPAL)
     subtitle_style = ParagraphStyle('SubTitleStyle', parent=styles['Normal'], fontName='Helvetica', fontSize=9, textColor=COLOR_SECUNDARIO)
     body_style = ParagraphStyle('BodyStyle', parent=styles['Normal'], fontName='Helvetica', fontSize=10, textColor=COLOR_TEXTO)
     bold_style = ParagraphStyle('BoldStyle', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=10, textColor=COLOR_TEXTO)
 
-    # Buscar logo.png o logo.jpg y calcular su relación de aspecto original
     logo_widget = None
     for filename in ["logo.png", "logo.jpg", "logo.jpeg"]:
         if os.path.exists(filename):
             try:
                 with PILImage.open(filename) as im:
                     orig_w, orig_h = im.size
-                target_w = 75  # Ancho fijo en puntos
-                target_h = target_w * (orig_h / orig_w)  # Altura proporcional automática
+                target_w = 75  
+                target_h = target_w * (orig_h / orig_w)  
                 logo_widget = RLImage(filename, width=target_w, height=target_h)
                 logo_widget.hAlign = 'LEFT'
             except Exception:
@@ -184,7 +182,7 @@ def generar_pdf_cotizacion(datos_pdf):
     return buffer
 
 # ==========================================
-# ESTILOS VISUALES CSS (INTERFAZ WEB ORIGINAL RESTAURADA)
+# ESTILOS VISUALES CSS (INTERFAZ WEB)
 # ==========================================
 st.markdown("""
     <style>
@@ -428,10 +426,12 @@ with tab_cotizador:
             st.success("✅ Cotización registrada.")
 
 # ------------------------------------------
-# TAB 2: HISTORIAL DE COTIZACIONES
+# TAB 2: HISTORIAL DE COTIZACIONES (SOLO LECTURA SEGURO)
 # ------------------------------------------
 with tab_historial:
-    st.header("📋 Historial de Cotizaciones Guardadas")
+    st.header("📋 Historial de Cotizaciones Registradas")
+    st.markdown("Visualización de las cotizaciones emitidas por el taller (modo consulta protegida).")
+    
     df_historial = cargar_historial()
     
     if not df_historial.empty:
@@ -441,34 +441,24 @@ with tab_historial:
         h_col3.metric("Promedio por Venta", f"${df_historial['Total Cobrado'].mean():,.2f} MXN")
         st.markdown("---")
 
-        df_editado = st.data_editor(
+        # Tabla de solo lectura con imágenes miniatura y formato monetario
+        st.dataframe(
             df_historial,
             use_container_width=True,
-            num_rows="dynamic",
-            key="editor_historial",
+            hide_index=True,
             column_config={
                 "id": None,
                 "Foto": st.column_config.ImageColumn("Foto", help="Vista previa del producto en catálogo", width="small"),
-                "Fecha": st.column_config.TextColumn("Fecha", disabled=True),
+                "Fecha": st.column_config.TextColumn("Fecha"),
+                "Cliente": st.column_config.TextColumn("Cliente"),
+                "Teléfono": st.column_config.TextColumn("Teléfono"),
+                "Producto": st.column_config.TextColumn("Producto"),
+                "Material": st.column_config.TextColumn("Material"),
+                "Cantidad": st.column_config.NumberColumn("Cantidad", format="%d"),
                 "Precio Unitario": st.column_config.NumberColumn("Precio Unitario", format="$%.2f"),
                 "Total Cobrado": st.column_config.NumberColumn("Total Cobrado", format="$%.2f")
             }
         )
-
-        if st.button("💾 Guardar Cambios en Historial", type="primary", key="btn_save_hist"):
-            for _, row in df_editado.iterrows():
-                if pd.notnull(row["id"]):
-                    supabase.table("historial_cotizaciones").update({
-                        "cliente": row["Cliente"],
-                        "telefono": row["Teléfono"],
-                        "cantidad": int(row["Cantidad"]),
-                        "precio_unitario": float(row["Precio Unitario"]),
-                        "total_cobrado": float(row["Total Cobrado"])
-                    }).eq("id", row["id"]).execute()
-            st.toast("Historial actualizado correctamente", icon="📝")
-            st.success("✅ Historial actualizado.")
-            time.sleep(1)
-            st.rerun()
     else:
         st.info("💡 Aún no hay cotizaciones guardadas.")
 
