@@ -63,7 +63,7 @@ def cargar_historial():
     if res.data:
         df = pd.DataFrame(res.data)
         
-        # Ajuste de hora a Zona Horaria de México (America/Mexico_City)
+        # Ajuste de hora a Zona Horaria de México para la Fecha de Captura
         dt_utc = pd.to_datetime(df["fecha"])
         if dt_utc.dt.tz is None:
             dt_mexico = dt_utc.dt.tz_localize("UTC").dt.tz_convert(ZoneInfo("America/Mexico_City"))
@@ -72,16 +72,17 @@ def cargar_historial():
             
         df["fecha_captura"] = dt_mexico.dt.strftime("%Y-%m-%d %H:%M")
         
-        # Manejo seguro de fechas de cotización
+        # Validación individual por fila: si fecha_cotizacion está vacía, usa su propia fecha de registro (fecha)
         if "fecha_cotizacion" in df.columns:
             df["fecha_cotizacion"] = df["fecha_cotizacion"].fillna(df["fecha"])
         else:
             df["fecha_cotizacion"] = df["fecha"]
             
+        # Convertir asegurando que cada fila conserve su fecha exacta independiente
         df["dt_cotizacion"] = pd.to_datetime(df["fecha_cotizacion"], errors="coerce")
         df["dt_cotizacion"] = df["dt_cotizacion"].fillna(pd.to_datetime(df["fecha"]))
         
-        # Guardar la fecha en formato de objeto date para el selector DateColumn
+        # Extraer limpiamente el objeto fecha (date) para el selector y la vista
         df["Fecha Cotización"] = df["dt_cotizacion"].dt.date
             
         cat_dict = cargar_catalogo()
