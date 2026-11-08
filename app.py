@@ -62,19 +62,26 @@ def cargar_historial():
     if res.data:
         df = pd.DataFrame(res.data)
         
-        # Conversión segura de fecha de captura evitando errores de formato
-        df["dt_captura"] = pd.to_datetime(df["fecha"], errors='coerce')
-        df["fecha_captura"] = df["dt_captura"].dt.strftime("%Y-%m-%d %H:%M").fillna("-")
-        
-        # Conversión segura para la fecha de cotización (trato)
-        if "fecha_cotizacion" in df.columns:
-            df["dt_cotizacion"] = pd.to_datetime(df["fecha_cotizacion"], errors='coerce')
-            # Si alguna fila no tiene fecha_cotizacion, usa la de captura como respaldo
-            df["dt_cotizacion"] = df["dt_cotizacion"].fillna(df["dt_captura"])
+        # Forzar conversión de la fecha de captura a la zona horaria de México (-6)
+        dt_cap = pd.to_datetime(df["fecha"], errors='coerce')
+        if dt_cap.dt.tz is not None:
+            dt_cap = dt_cap.dt.tz_convert("America/Mexico_City")
         else:
-            df["dt_cotizacion"] = df["dt_captura"]
+            # Si viene sin zona horaria, asumimos UTC y la convertimos
+            dt_cap = dt_cap.dt.tz_localize("UTC").dt.tz_convert("America/Mexico_City")
             
-        df["Fecha Cotización"] = df["dt_cotizacion"].dt.strftime("%Y-%m-%d").fillna("-")
+        df["fecha_captura"] = dt_cap.dt.strftime("%Y-%m-%d %H:%M").fillna("-")
+        
+        # Conversión para la fecha de cotización (trato)
+        if "fecha_cotizacion" in df.columns:
+            dt_cot = pd.to_datetime(df["fecha_cotizacion"], errors='coerce')
+            # Si tiene zona horaria la convertimos, si no, la manejamos directo
+            mask_tz = dt_cot.notnull()
+            df["dt_cotizacion"] = dt_cot
+            df["Fecha Cotización"] = dt_cot.dt.strftime("%Y-%m-%d").fillna("-")
+        else:
+            df["dt_cotizacion"] = dt_cap
+            df["Fecha Cotización"] = dt_cap.dt.strftime("%Y-%m-%d").fillna("-")
             
         cat_dict = cargar_catalogo()
         df["foto_url"] = df["producto"].map(lambda p: cat_dict.get(p, {}).get("foto"))
@@ -432,12 +439,15 @@ with tab_cotizador:
 
 with col_act3:
         if st.button("💾 Guardar en Historial", use_container_width=True, key="btn_save_cot"):
-            # Obtener la fecha y hora actual ajustada a la hora de México
             from zoneinfo import ZoneInfo
             tz_mexico = ZoneInfo("America/Mexico_City")
             ahora_mexico = datetime.datetime.now(tz_mexico)
 
-            f_cot_val = datetime.datetime.combine(fecha_cotizacion_manual, datetime.datetime.min.time()).isoformat() if usar_fecha_manual else ahora_mexico.isoformat()
+            # Si es fecha manual usa medianoche local, si es ahora usa el timestamp exacto de México con su offset
+            if usar_fecha_manual:
+                f_cot_val = datetime.datetime.combine(fecha_cotizacion_manual, datetime.datetime.min.time(), tzinfo=tz_mexico).isoformat()
+            else:
+                f_cot_val = ahora_mexico.isoformat()
             
             data_cot = {
                 "cliente": nombre_cliente.strip() if nombre_cliente.strip() else "General",
@@ -450,7 +460,7 @@ with col_act3:
                 "fecha_cotizacion": f_cot_val
             }
             supabase.table("historial_cotizaciones").insert(data_cot).execute()
-            st.cache_data.clear() # Limpiamos caché para que el historial refleje el cambio al instante
+            st.cache_data.clear()
             st.toast("¡Cotización guardada exitosamente!", icon="✅")
             st.success("✅ Cotización registrada.")
 
