@@ -504,19 +504,38 @@ with tab_historial:
         )
 
         if st.button("💾 Guardar Cambios en Registro", type="primary", key="btn_save_hist"):
-            for _, row in df_editado.iterrows():
-                if pd.notnull(row["id"]):
-                    supabase.table("historial_cotizaciones").update({
-                        "fecha": row["Fecha Cotización"],
-                        "cliente": row["Cliente"],
-                        "telefono": row["Teléfono"]
-                    }).eq("id", row["id"]).execute()
-            st.toast("Registro actualizado correctamente", icon="📝")
-            st.success("✅ Cambios guardados.")
-            time.sleep(1)
-            st.rerun()
-    else:
-        st.info("💡 Aún no hay cotizaciones guardadas.")
+            # 1. Obtener las celdas o filas que realmente fueron editadas en la interfaz
+            cambios = st.session_state.editor_historial_seguro.get("edited_rows", {})
+            
+            if cambios:
+                for idx_fila, valores_modificados in cambios.items():
+                    fila_original = df_tabla.iloc[idx_fila]
+                    id_registro = fila_original["id"]
+                    
+                    # Preparar diccionario con solo los datos permitidos a actualizar
+                    datos_a_actualizar = {}
+                    if "Fecha Cotización" in valores_modificados:
+                        datos_a_actualizar["fecha"] = valores_modificados["Fecha Cotización"]
+                    if "Cliente" in valores_modificados:
+                        datos_a_actualizar["cliente"] = valores_modificados["Cliente"]
+                    if "Teléfono" in valores_modificados:
+                        datos_a_actualizar["telefono"] = valores_modificados["Teléfono"]
+                    
+                    # Actualizar en Supabase solo la fila editada
+                    if datos_a_actualizar:
+                        supabase.table("historial_cotizaciones").update(datos_a_actualizar).eq("id", id_registro).execute()
+                
+                # 2. Limpiar el caché y el estado del widget para evitar el bug visual
+                cargar_historial.clear()
+                if "editor_historial_seguro" in st.session_state:
+                    del st.session_state["editor_historial_seguro"]
+                
+                st.toast("Registro actualizado correctamente", icon="📝")
+                st.success("✅ Cambios guardados.")
+                time.sleep(0.8)
+                st.rerun()
+            else:
+                st.info("💡 No detectaron cambios para guardar.")
 
 # ------------------------------------------
 # TAB 3: PANEL DE ADMINISTRACIÓN
