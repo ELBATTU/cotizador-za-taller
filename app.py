@@ -279,7 +279,7 @@ with tab_cotizador:
     st.markdown("<p style='font-size: 18px; color: #888;'>Cotizador Interactivo - Corte & Grabado Láser CNC</p>", unsafe_allow_html=True)
     st.markdown("---")
 
-    # Usamos un formulario general para que los campos no recarguen la página al escribir
+    # Formulario para evitar recargas al escribir texto o medidas
     with st.form("form_cotizador_principal"):
         col_cat, col_inputs = st.columns([1, 1.2])
 
@@ -288,11 +288,6 @@ with tab_cotizador:
             nombre_cliente = st.text_input("Nombre del Cliente:", placeholder="Ej. Juan Pérez")
             telefono_cliente = st.text_input("Teléfono WhatsApp (opcional):", placeholder="Ej. 4421234567")
             
-            usar_fecha_manual = st.checkbox("📅 Registrar con fecha de cotización pasada (desfasada)")
-            fecha_cotizacion_manual = datetime.date.today()
-            if usar_fecha_manual:
-                fecha_cotizacion_manual = st.date_input("Selecciona la fecha real del trato:", value=datetime.date.today())
-
             lista_productos = list(CATALOGO.keys())
             if "Personalizado (Medida Libre)" in lista_productos:
                 lista_productos.remove("Personalizado (Medida Libre)")
@@ -388,6 +383,20 @@ with tab_cotizador:
 
     st.markdown("<br>", unsafe_allow_html=True)
 
+    # ----------------------------------------------------
+    # SECCIÓN FUERA DEL FORMULARIO PARA LA FECHA DESFASADA Y BOTONES
+    # ----------------------------------------------------
+    st.markdown("### ⚙️ Opciones de Registro y Envío")
+    
+    f_op1, f_op2 = st.columns([1, 1])
+    with f_op1:
+        usar_fecha_manual = st.checkbox("📅 Registrar con fecha de cotización pasada (desfasada)")
+        fecha_cotizacion_manual = datetime.date.today()
+        if usar_fecha_manual:
+            fecha_cotizacion_manual = st.date_input("Selecciona la fecha real del trato:", value=datetime.date.today())
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
     col_act1, col_act2, col_act3 = st.columns(3)
     with col_act1:
         cliente_txt = nombre_cliente.strip() if nombre_cliente.strip() else "Cliente"
@@ -436,7 +445,7 @@ with tab_cotizador:
         if st.button("💾 Guardar en Historial", use_container_width=True, key="btn_save_cot"):
             f_cot_val = datetime.datetime.combine(fecha_cotizacion_manual, datetime.datetime.min.time()).isoformat() if usar_fecha_manual else datetime.datetime.now().isoformat()
             data_cot = {
-                "cliente": nombre_cliente.strip() if nombre_cliente.strip() else "General",
+                "cliente": cliente_txt,
                 "telefono": telefono_cliente.strip(),
                 "producto": producto_sel,
                 "material": material,
