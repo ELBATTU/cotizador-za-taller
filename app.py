@@ -62,26 +62,19 @@ def cargar_historial():
     if res.data:
         df = pd.DataFrame(res.data)
         
-        # 1. Procesar la Fecha de Captura (Sistema)
-        dt_cap = pd.to_datetime(df["fecha"], errors='coerce')
-        if dt_cap.dt.tz is None:
-            dt_cap = dt_cap.dt.tz_localize("UTC", nonexistent='shift_forward', ambiguous='NaT')
-        dt_cap_mex = dt_cap.dt.tz_convert("America/Mexico_City")
-        df["fecha_captura"] = dt_cap_mex.dt.strftime("%Y-%m-%d %H:%M").fillna("-")
+        # 1. Fecha de captura (cuándo se guardó en el sistema)
+        dt_cap = pd.to_datetime(df["fecha"], errors='coerce', utc=True)
+        df["fecha_captura"] = dt_cap.dt.tz_convert("America/Mexico_City").dt.strftime("%Y-%m-%d %H:%M").fillna("-")
         
-        # 2. Procesar la Fecha de Cotización (Trato real) respetando cada registro individual
+        # 2. Fecha de cotización (la fecha real del trato / desfasada)
         if "fecha_cotizacion" in df.columns:
-            dt_cot = pd.to_datetime(df["fecha_cotizacion"], errors='coerce')
-            if dt_cot.dt.tz is None:
-                dt_cot = dt_cot.dt.tz_localize("UTC", nonexistent='shift_forward', ambiguous='NaT')
-            dt_cot_mex = dt_cot.dt.tz_convert("America/Mexico_City")
-            
-            # Si una fila tuviera fecha nula, respaldamos únicamente esa con su propia fecha de captura
-            df["dt_cotizacion"] = dt_cot_mex.fillna(dt_cap_mex)
+            # Convertimos la columna exacta fecha_cotizacion de Supabase
+            dt_cot = pd.to_datetime(df["fecha_cotizacion"], errors='coerce', utc=True)
+            df["dt_cotizacion"] = dt_cot.dt.tz_convert("America/Mexico_City")
             df["Fecha Cotización"] = df["dt_cotizacion"].dt.strftime("%Y-%m-%d").fillna("-")
         else:
-            df["dt_cotizacion"] = dt_cap_mex
-            df["Fecha Cotización"] = dt_cap_mex.dt.strftime("%Y-%m-%d").fillna("-")
+            df["dt_cotizacion"] = dt_cap.dt.tz_convert("America/Mexico_City")
+            df["Fecha Cotización"] = df["dt_cotizacion"].dt.strftime("%Y-%m-%d").fillna("-")
             
         cat_dict = cargar_catalogo()
         df["foto_url"] = df["producto"].map(lambda p: cat_dict.get(p, {}).get("foto"))
@@ -95,7 +88,6 @@ def cargar_historial():
         
         return df[["id", "Foto", "Fecha Cotización", "Fecha Captura", "Cliente", "Teléfono", "Producto", "Material", "Cantidad", "Precio Unitario", "Total Cobrado", "dt_cotizacion"]]
     return pd.DataFrame()
-
 # Carga inicial
 precios_materiales = cargar_materiales()
 CATALOGO = cargar_catalogo()
