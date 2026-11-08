@@ -502,8 +502,6 @@ with tab_historial:
         if st.button("💾 Guardar Cambios en Registro", type="primary", key="btn_save_hist"):
             for _, row in df_editado.iterrows():
                 if pd.notnull(row["id"]):
-                    # Actualizamos SOLAMENTE la fecha de cotización, el cliente y el teléfono.
-                    # Al no tocar la 'Fecha Captura' en este diccionario, evitamos que se sobrescriba.
                     supabase.table("historial_cotizaciones").update({
                         "fecha": row["Fecha Cotización"],
                         "cliente": row["Cliente"],
@@ -731,4 +729,4 @@ with tab_admin:
                     time.sleep(1.2)
                     st.rerun()
             else:
-                st.info("💡
+                st.info("💡 No hay materiales registrados para eliminar.")
