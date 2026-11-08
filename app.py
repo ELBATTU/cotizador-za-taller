@@ -62,15 +62,15 @@ def cargar_historial():
     if res.data:
         df = pd.DataFrame(res.data)
         
-        # Manejo flexible de columnas de fecha
-        col_fecha = "fecha" if "fecha" in df.columns else "created_at"
-        df["fecha_dt"] = pd.to_datetime(df[col_fecha])
+        # Fecha de cotización real
+        df["fecha_dt"] = pd.to_datetime(df["fecha"])
         df["Fecha Cotización"] = df["fecha_dt"].dt.strftime("%Y-%m-%d")
         
-        if "created_at" in df.columns:
+        # Fecha de captura en sistema (si no existe, usa la fecha del registro)
+        if "created_at" in df.columns and df["created_at"].notnull().all():
             df["Fecha Captura"] = pd.to_datetime(df["created_at"]).dt.strftime("%Y-%m-%d %H:%M")
         else:
-            df["Fecha Captura"] = df["Fecha Cotización"]
+            df["Fecha Captura"] = df["fecha_dt"].dt.strftime("%Y-%m-%d %H:%M")
 
         cat_dict = cargar_catalogo()
         df["foto_url"] = df["producto"].map(lambda p: cat_dict.get(p, {}).get("foto"))
@@ -284,7 +284,6 @@ with tab_cotizador:
         nombre_cliente = st.text_input("Nombre del Cliente:", placeholder="Ej. Juan Pérez")
         telefono_cliente = st.text_input("Teléfono WhatsApp (opcional):", placeholder="Ej. 4421234567")
         
-        # CAMPO DE FECHA DE COTIZACIÓN (Permite cambiarla si se está registrando algo atrasado)
         fecha_cotizacion_input = st.date_input("📅 Fecha de Cotización:", value=datetime.date.today())
         
         lista_productos = list(CATALOGO.keys())
@@ -481,7 +480,7 @@ with tab_historial:
 
         df_tabla = df_historial.drop(columns=["fecha_dt"])
 
-        st.markdown("💡 *Puedes corregir **Cliente**, **Teléfono** o ajustar la **Fecha de Cotización** en caso de registros desfasados.*")
+        st.markdown("💡 *Puedes corregir **Cliente**, **Teléfono** o ajustar la **Fecha de Cotización**.*")
         
         df_editado = st.data_editor(
             df_tabla,
@@ -504,38 +503,21 @@ with tab_historial:
         )
 
         if st.button("💾 Guardar Cambios en Registro", type="primary", key="btn_save_hist"):
-            # 1. Obtener las celdas o filas que realmente fueron editadas en la interfaz
-            cambios = st.session_state.editor_historial_seguro.get("edited_rows", {})
+            for _, row in df_editado.iterrows():
+                if pd.notnull(row["id"]):
+                    # Solo actualizamos los campos permitidos y aseguramos que 'fecha' sea la de cotización
+                    supabase.table("historial_cotizaciones").update({
+                        "fecha": row["Fecha Cotización"],
+                        "cliente": row["Cliente"],
+                        "telefono": row["Teléfono"]
+                    }).eq("id", row["id"]).execute()
             
-            if cambios:
-                for idx_fila, valores_modificados in cambios.items():
-                    fila_original = df_tabla.iloc[idx_fila]
-                    id_registro = fila_original["id"]
-                    
-                    # Preparar diccionario con solo los datos permitidos a actualizar
-                    datos_a_actualizar = {}
-                    if "Fecha Cotización" in valores_modificados:
-                        datos_a_actualizar["fecha"] = valores_modificados["Fecha Cotización"]
-                    if "Cliente" in valores_modificados:
-                        datos_a_actualizar["cliente"] = valores_modificados["Cliente"]
-                    if "Teléfono" in valores_modificados:
-                        datos_a_actualizar["telefono"] = valores_modificados["Teléfono"]
-                    
-                    # Actualizar en Supabase solo la fila editada
-                    if datos_a_actualizar:
-                        supabase.table("historial_cotizaciones").update(datos_a_actualizar).eq("id", id_registro).execute()
-                
-                # 2. Limpiar el caché y el estado del widget para evitar el bug visual
-                cargar_historial.clear()
-                if "editor_historial_seguro" in st.session_state:
-                    del st.session_state["editor_historial_seguro"]
-                
-                st.toast("Registro actualizado correctamente", icon="📝")
-                st.success("✅ Cambios guardados.")
-                time.sleep(0.8)
-                st.rerun()
-            else:
-                st.info("💡 No detectaron cambios para guardar.")
+            st.toast("Registro actualizado correctamente", icon="📝")
+            st.success("✅ Cambios guardados.")
+            time.sleep(0.8)
+            st.rerun()  # Forzamos recarga inmediata para evitar el bug visual en cascada
+    else:
+        st.info("💡 Aún no hay cotizaciones guardadas.")
 
 # ------------------------------------------
 # TAB 3: PANEL DE ADMINISTRACIÓN
