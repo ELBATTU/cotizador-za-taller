@@ -62,15 +62,12 @@ def cargar_historial():
     if res.data:
         df = pd.DataFrame(res.data)
         
-        # Fecha de cotización real
+        # Fecha de cotización real almacenada en la columna 'fecha'
         df["fecha_dt"] = pd.to_datetime(df["fecha"])
         df["Fecha Cotización"] = df["fecha_dt"].dt.strftime("%Y-%m-%d")
         
-        # Fecha de captura en sistema (lee created_at de Supabase)
-        if "created_at" in df.columns and df["created_at"].notnull().all():
-            df["Fecha Captura"] = pd.to_datetime(df["created_at"]).dt.strftime("%Y-%m-%d %H:%M")
-        else:
-            df["Fecha Captura"] = df["fecha_dt"].dt.strftime("%Y-%m-%d %H:%M")
+        # Como en Supabase solo tenemos 'fecha', la usamos también de respaldo para la visualización de captura
+        df["Fecha Captura"] = df["fecha_dt"].dt.strftime("%Y-%m-%d %H:%M")
 
         cat_dict = cargar_catalogo()
         df["foto_url"] = df["producto"].map(lambda p: cat_dict.get(p, {}).get("foto"))
@@ -480,7 +477,7 @@ with tab_historial:
 
         df_tabla = df_historial.drop(columns=["fecha_dt"])
 
-        st.markdown("💡 *Puedes corregir **Cliente**, **Teléfono** o ajustar la **Fecha de Cotización**. La **Fecha de Captura** está protegida automáticamente.*")
+        st.markdown("💡 *Puedes corregir **Cliente**, **Teléfono** o ajustar la **Fecha de Cotización** en la tabla.*")
         
         df_editado = st.data_editor(
             df_tabla,
@@ -491,7 +488,7 @@ with tab_historial:
                 "id": None,
                 "Foto": st.column_config.ImageColumn("Foto", help="Vista previa del producto", width="small"),
                 "Fecha Cotización": st.column_config.TextColumn("Fecha Cotización"),
-                "Fecha Captura": st.column_config.TextColumn("Fecha Captura", disabled=True), # INALTERABLE
+                "Fecha Captura": st.column_config.TextColumn("Fecha Captura", disabled=True),
                 "Cliente": st.column_config.TextColumn("Cliente"),
                 "Teléfono": st.column_config.TextColumn("Teléfono"),
                 "Producto": st.column_config.TextColumn("Producto", disabled=True),
@@ -505,8 +502,8 @@ with tab_historial:
         if st.button("💾 Guardar Cambios en Registro", type="primary", key="btn_save_hist"):
             for _, row in df_editado.iterrows():
                 if pd.notnull(row["id"]):
-                    # Aseguramos actualizar exclusivamente la fecha de cotización, cliente y teléfono.
-                    # 'Fecha Captura' (created_at) jamás se toca ni se envía en este update.
+                    # Actualizamos SOLAMENTE la fecha de cotización, el cliente y el teléfono.
+                    # Al no tocar la 'Fecha Captura' en este diccionario, evitamos que se sobrescriba.
                     supabase.table("historial_cotizaciones").update({
                         "fecha": row["Fecha Cotización"],
                         "cliente": row["Cliente"],
@@ -734,4 +731,4 @@ with tab_admin:
                     time.sleep(1.2)
                     st.rerun()
             else:
-                st.info("💡 No hay materiales registrados para eliminar.")
+                st.info("💡
