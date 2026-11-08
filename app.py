@@ -4,10 +4,11 @@ import datetime
 import urllib.parse
 import time
 import io
+import os
 from PIL import Image
 from supabase import create_client, Client
 from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
@@ -62,7 +63,6 @@ def cargar_historial():
         df = pd.DataFrame(res.data)
         df["fecha"] = pd.to_datetime(df["fecha"]).dt.strftime("%Y-%m-%d %H:%M")
         
-        # Mapear URL de foto desde el catálogo actual por nombre de producto
         cat_dict = cargar_catalogo()
         df["foto_url"] = df["producto"].map(lambda p: cat_dict.get(p, {}).get("foto"))
         
@@ -80,7 +80,7 @@ precios_materiales = cargar_materiales()
 CATALOGO = cargar_catalogo()
 
 # ==========================================
-# GENERADOR DE PDF PROFESIONAL
+# GENERADOR DE PDF PROFESIONAL CON LOGOTIPO
 # ==========================================
 def generar_pdf_cotizacion(datos_pdf):
     buffer = io.BytesIO()
@@ -88,17 +88,28 @@ def generar_pdf_cotizacion(datos_pdf):
     elements = []
     styles = getSampleStyleSheet()
 
-    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=20, textColor=colors.HexColor('#1E88E5'))
-    subtitle_style = ParagraphStyle('SubTitleStyle', parent=styles['Normal'], fontName='Helvetica', fontSize=10, textColor=colors.HexColor('#666666'))
+    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=18, textColor=colors.HexColor('#1E88E5'))
+    subtitle_style = ParagraphStyle('SubTitleStyle', parent=styles['Normal'], fontName='Helvetica', fontSize=9, textColor=colors.HexColor('#666666'))
     body_style = ParagraphStyle('BodyStyle', parent=styles['Normal'], fontName='Helvetica', fontSize=10, textColor=colors.HexColor('#333333'))
     bold_style = ParagraphStyle('BoldStyle', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=10, textColor=colors.HexColor('#333333'))
 
+    # Validar si existe el logo.png en la raíz del proyecto
+    logo_path = "logo.png"
+    if os.path.exists(logo_path):
+        # Redimensionar la imagen para que encaje bien en el PDF (ej. ancho 70 puntos)
+        img_logo = RLImage(logo_path, width=70, height=70)
+        img_logo.hAlign = 'LEFT'
+        header_col1 = [img_logo, Paragraph("<b>Z&A TALLER CREATIVO</b><br/>Corte & Grabado Láser CNC<br/>Contacto: taller@zataller.com", subtitle_style)]
+    else:
+        header_col1 = [Paragraph("<b>Z&A TALLER CREATIVO</b><br/>Corte & Grabado Láser CNC<br/>Contacto: taller@zataller.com", title_style)]
+
     header_data = [
         [
-            Paragraph("<b>Z&A TALLER CREATIVO</b><br/>Corte & Grabado Láser CNC<br/>Contacto: taller@zataller.com", title_style),
+            header_col1,
             Paragraph(f"<b>COTIZACIÓN DE VENTA</b><br/>Fecha: {datetime.datetime.now().strftime('%d/%m/%Y')}<br/>Vigencia: 15 días", subtitle_style)
         ]
     ]
+    
     header_table = Table(header_data, colWidths=[330, 210])
     header_table.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'MIDDLE')]))
     elements.append(header_table)
