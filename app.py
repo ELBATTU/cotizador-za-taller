@@ -61,25 +61,18 @@ def cargar_historial():
     res = supabase.table("historial_cotizaciones").select("*").order("fecha", desc=True).execute()
     if res.data:
         df = pd.DataFrame(res.data)
+        df["fecha"] = pd.to_datetime(df["fecha"]).dt.strftime("%Y-%m-%d %H:%M")
         
-        # Fecha de cotización real almacenada en la columna 'fecha'
-        df["fecha_dt"] = pd.to_datetime(df["fecha"])
-        df["Fecha Cotización"] = df["fecha_dt"].dt.strftime("%Y-%m-%d")
-        
-        # Como en Supabase solo tenemos 'fecha', la usamos también de respaldo para la visualización de captura
-        df["Fecha Captura"] = df["fecha_dt"].dt.strftime("%Y-%m-%d %H:%M")
-
         cat_dict = cargar_catalogo()
         df["foto_url"] = df["producto"].map(lambda p: cat_dict.get(p, {}).get("foto"))
         
         df.rename(columns={
-            "cliente": "Cliente", "telefono": "Teléfono",
+            "fecha": "Fecha", "cliente": "Cliente", "telefono": "Teléfono",
             "producto": "Producto", "material": "Material", "cantidad": "Cantidad",
             "precio_unitario": "Precio Unitario", "total_cobrado": "Total Cobrado",
             "foto_url": "Foto"
         }, inplace=True)
-        
-        return df[["id", "Foto", "Fecha Cotización", "Fecha Captura", "fecha_dt", "Cliente", "Teléfono", "Producto", "Material", "Cantidad", "Precio Unitario", "Total Cobrado"]]
+        return df[["id", "Foto", "Fecha", "Cliente", "Teléfono", "Producto", "Material", "Cantidad", "Precio Unitario", "Total Cobrado"]]
     return pd.DataFrame()
 
 # Carga inicial
@@ -87,7 +80,7 @@ precios_materiales = cargar_materiales()
 CATALOGO = cargar_catalogo()
 
 # ==========================================
-# GENERADOR DE PDF PROFESIONAL CON LOGO Y PALETA CORPORATIVA
+# GENERADOR DE PDF CON COLORES DEL LOGO Y ASPECTO PROPORCIONAL
 # ==========================================
 def generar_pdf_cotizacion(datos_pdf):
     buffer = io.BytesIO()
@@ -127,7 +120,7 @@ def generar_pdf_cotizacion(datos_pdf):
     header_data = [
         [
             header_col1,
-            Paragraph(f"<b>COTIZACIÓN DE VENTA</b><br/><b>Fecha Emisión:</b> {datos_pdf['fecha_emision']}<br/><b>Vigencia:</b> 15 días", subtitle_style)
+            Paragraph(f"<b>COTIZACIÓN DE VENTA</b><br/><b>Fecha:</b> {datetime.datetime.now().strftime('%d/%m/%Y')}<br/><b>Vigencia:</b> 15 días", subtitle_style)
         ]
     ]
     
@@ -281,8 +274,6 @@ with tab_cotizador:
         nombre_cliente = st.text_input("Nombre del Cliente:", placeholder="Ej. Juan Pérez")
         telefono_cliente = st.text_input("Teléfono WhatsApp (opcional):", placeholder="Ej. 4421234567")
         
-        fecha_cotizacion_input = st.date_input("📅 Fecha de Cotización:", value=datetime.date.today())
-        
         lista_productos = list(CATALOGO.keys())
         if "Personalizado (Medida Libre)" in lista_productos:
             lista_productos.remove("Personalizado (Medida Libre)")
@@ -409,8 +400,7 @@ with tab_cotizador:
             "ancho": ancho,
             "cantidad": cantidad,
             "precio_unitario": precio_unitario_final,
-            "total": precio_total_neto,
-            "fecha_emision": fecha_cotizacion_input.strftime("%d/%m/%Y")
+            "total": precio_total_neto
         })
         st.download_button(
             label="📄 Descargar PDF Formal",
@@ -423,7 +413,6 @@ with tab_cotizador:
     with col_act3:
         if st.button("💾 Guardar en Historial", use_container_width=True, key="btn_save_cot"):
             data_cot = {
-                "fecha": fecha_cotizacion_input.strftime("%Y-%m-%d %H:%M:%S"),
                 "cliente": nombre_cliente.strip() if nombre_cliente.strip() else "General",
                 "telefono": telefono_cliente.strip(),
                 "producto": producto_sel,
@@ -437,81 +426,39 @@ with tab_cotizador:
             st.success("✅ Cotización registrada.")
 
 # ------------------------------------------
-# TAB 2: HISTORIAL DE COTIZACIONES
+# TAB 2: HISTORIAL DE COTIZACIONES (SOLO LECTURA SEGURO)
 # ------------------------------------------
 with tab_historial:
     st.header("📋 Historial de Cotizaciones Registradas")
+    st.markdown("Visualización de las cotizaciones emitidas por el taller (modo consulta protegida).")
     
-    df_completo = cargar_historial()
+    df_historial = cargar_historial()
     
-    if not df_completo.empty:
-        st.markdown("### 🔍 Filtrar Historial por Fecha")
-        f_col1, f_col2, f_col3 = st.columns([1, 1, 2])
-        
-        filtro_tipo = f_col1.selectbox("Periodo:", ["Todo", "Mes Actual", "Año Actual", "Personalizado"])
-        
-        df_historial = df_completo.copy()
-        ahora = datetime.datetime.now()
-        
-        if filtro_tipo == "Mes Actual":
-            df_historial = df_historial[(df_historial["fecha_dt"].dt.year == ahora.year) & (df_historial["fecha_dt"].dt.month == ahora.month)]
-        elif filtro_tipo == "Año Actual":
-            df_historial = df_historial[df_historial["fecha_dt"].dt.year == ahora.year]
-        elif filtro_tipo == "Personalizado":
-            rango_fechas = f_col2.date_input("Rango de fechas:", value=(ahora.date() - datetime.timedelta(days=30), ahora.date()))
-            if len(rango_fechas) == 2:
-                f_inicio, f_fin = rango_fechas
-                df_historial = df_historial[(df_historial["fecha_dt"].dt.date >= f_inicio) & (df_historial["fecha_dt"].dt.date <= f_fin)]
-
-        st.markdown("---")
-
+    if not df_historial.empty:
         h_col1, h_col2, h_col3 = st.columns(3)
-        total_cot = len(df_historial)
-        monto_total = df_historial['Total Cobrado'].sum() if total_cot > 0 else 0
-        promedio_venta = df_historial['Total Cobrado'].mean() if total_cot > 0 else 0
-        
-        h_col1.metric("Total Cotizaciones (Filtradas)", total_cot)
-        h_col2.metric("Monto Total Cotizado", f"${monto_total:,.2f} MXN")
-        h_col3.metric("Promedio por Venta", f"${promedio_venta:,.2f} MXN")
+        h_col1.metric("Total Cotizaciones", len(df_historial))
+        h_col2.metric("Monto Total Cotizado", f"${df_historial['Total Cobrado'].sum():,.2f} MXN")
+        h_col3.metric("Promedio por Venta", f"${df_historial['Total Cobrado'].mean():,.2f} MXN")
         st.markdown("---")
 
-        df_tabla = df_historial.drop(columns=["fecha_dt"])
-
-        st.markdown("💡 *Puedes corregir **Cliente**, **Teléfono** o ajustar la **Fecha de Cotización** en la tabla.*")
-        
-        df_editado = st.data_editor(
-            df_tabla,
+        # Tabla de solo lectura con imágenes miniatura y formato monetario
+        st.dataframe(
+            df_historial,
             use_container_width=True,
             hide_index=True,
-            key="editor_historial_seguro",
             column_config={
                 "id": None,
-                "Foto": st.column_config.ImageColumn("Foto", help="Vista previa del producto", width="small"),
-                "Fecha Cotización": st.column_config.TextColumn("Fecha Cotización"),
-                "Fecha Captura": st.column_config.TextColumn("Fecha Captura", disabled=True),
+                "Foto": st.column_config.ImageColumn("Foto", help="Vista previa del producto en catálogo", width="small"),
+                "Fecha": st.column_config.TextColumn("Fecha"),
                 "Cliente": st.column_config.TextColumn("Cliente"),
                 "Teléfono": st.column_config.TextColumn("Teléfono"),
-                "Producto": st.column_config.TextColumn("Producto", disabled=True),
-                "Material": st.column_config.TextColumn("Material", disabled=True),
-                "Cantidad": st.column_config.NumberColumn("Cantidad", format="%d", disabled=True),
-                "Precio Unitario": st.column_config.NumberColumn("Precio Unitario", format="$%.2f", disabled=True),
-                "Total Cobrado": st.column_config.NumberColumn("Total Cobrado", format="$%.2f", disabled=True)
+                "Producto": st.column_config.TextColumn("Producto"),
+                "Material": st.column_config.TextColumn("Material"),
+                "Cantidad": st.column_config.NumberColumn("Cantidad", format="%d"),
+                "Precio Unitario": st.column_config.NumberColumn("Precio Unitario", format="$%.2f"),
+                "Total Cobrado": st.column_config.NumberColumn("Total Cobrado", format="$%.2f")
             }
         )
-
-        if st.button("💾 Guardar Cambios en Registro", type="primary", key="btn_save_hist"):
-            for _, row in df_editado.iterrows():
-                if pd.notnull(row["id"]):
-                    supabase.table("historial_cotizaciones").update({
-                        "fecha": row["Fecha Cotización"],
-                        "cliente": row["Cliente"],
-                        "telefono": row["Teléfono"]
-                    }).eq("id", row["id"]).execute()
-            
-            st.toast("Registro actualizado correctamente", icon="📝")
-            st.success("✅ Cambios guardados.")
-            time.sleep(0.8)
-            st.rerun()
     else:
         st.info("💡 Aún no hay cotizaciones guardadas.")
 
