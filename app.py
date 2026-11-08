@@ -503,8 +503,8 @@ with tab_historial:
         )
         
         st.markdown("---")
-        st.markdown("### ✏️ Edición Controlada (Cliente, Teléfono y Fecha de Trato)")
-        st.info("💡 Haz doble clic en la celda de **Fecha Cotización** para abrir el calendario interactivo. No es posible ingresar letras ni formatos no válidos.")
+        st.markdown("### ✏️ Edición Controlada")
+        st.info("💡 Campos editables permitidos: **Nombre del Cliente**, **Teléfono** y **Fecha Cotización** (haz doble clic en la fecha para abrir el calendario interactivo y evitar errores de formato).")
 
         df_editable = df_filtrado[["id", "Foto", "Fecha Cotización", "Fecha Captura", "Cliente", "Teléfono", "Producto", "Material", "Cantidad", "Precio Unitario", "Total Cobrado"]].copy()
 
