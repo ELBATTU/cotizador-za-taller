@@ -229,15 +229,17 @@ def verificar_password():
         with col2:
             st.markdown("<br><br>", unsafe_allow_html=True)
             st.subheader("🔒 Acceso Restringido - Z&A Taller Creativo")
-            pwd_input = st.text_input("Ingresa la contraseña del taller:", type="password")
-            
-            if st.button("Ingresar", type="primary", use_container_width=True, key="btn_login"):
-                pwd_correcta = st.secrets.get("passwords", {}).get("admin", "ZA2026*")
-                if pwd_input == pwd_correcta:
-                    st.session_state["autenticado"] = True
-                    st.rerun()
-                else:
-                    st.error("❌ Contraseña incorrecta")
+            with st.form("form_login"):
+                pwd_input = st.text_input("Ingresa la contraseña del taller:", type="password")
+                btn_ingresar = st.form_submit_button("Ingresar", use_container_width=True)
+                
+                if btn_ingresar:
+                    pwd_correcta = st.secrets.get("passwords", {}).get("admin", "ZA2026*")
+                    if pwd_input == pwd_correcta:
+                        st.session_state["autenticado"] = True
+                        st.rerun()
+                    else:
+                        st.error("❌ Contraseña incorrecta")
         return False
     return True
 
@@ -277,46 +279,50 @@ with tab_cotizador:
     st.markdown("<p style='font-size: 18px; color: #888;'>Cotizador Interactivo - Corte & Grabado Láser CNC</p>", unsafe_allow_html=True)
     st.markdown("---")
 
-    col_cat, col_inputs = st.columns([1, 1.2])
+    # Usamos un formulario general para que los campos no recarguen la página al escribir
+    with st.form("form_cotizador_principal"):
+        col_cat, col_inputs = st.columns([1, 1.2])
 
-    with col_cat:
-        st.subheader("🖼️ Producto & Datos Cliente")
-        nombre_cliente = st.text_input("Nombre del Cliente:", placeholder="Ej. Juan Pérez")
-        telefono_cliente = st.text_input("Teléfono WhatsApp (opcional):", placeholder="Ej. 4421234567")
-        
-        # Opción para registrar con fecha desfasada (Fecha de Cotización)
-        usar_fecha_manual = st.checkbox("📅 Registrar con fecha de cotización pasada (desfasada)")
-        fecha_cotizacion_manual = datetime.date.today()
-        if usar_fecha_manual:
-            fecha_cotizacion_manual = st.date_input("Selecciona la fecha real del trato:", value=datetime.date.today())
-
-        lista_productos = list(CATALOGO.keys())
-        if "Personalizado (Medida Libre)" in lista_productos:
-            lista_productos.remove("Personalizado (Medida Libre)")
-            lista_productos.insert(0, "Personalizado (Medida Libre)")
-
-        producto_sel = st.selectbox("Elige un producto del catálogo:", lista_productos)        
-        datos_prod = CATALOGO[producto_sel]
-        
-        if datos_prod.get("foto"):
-            st.image(datos_prod["foto"], caption=producto_sel, use_container_width=True)
-        else:
-            st.info("💡 Producto personalizado sin foto asignada.")
-
-    with col_inputs:
-        st.subheader("📏 Dimensiones y Tiempos")
-        mat_keys = list(precios_materiales.keys())
-        mat_index = mat_keys.index(datos_prod["material"]) if datos_prod["material"] in mat_keys else 0
-        material = st.selectbox("Material:", mat_keys, index=mat_index)
-        
-        col_l, col_a = st.columns(2)
-        largo = col_l.number_input("Largo (cm):", value=float(datos_prod["largo"]), min_value=1.0, step=1.0)
-        ancho = col_a.number_input("Ancho (cm):", value=float(datos_prod["ancho"]), min_value=1.0, step=1.0)
+        with col_cat:
+            st.subheader("🖼️ Producto & Datos Cliente")
+            nombre_cliente = st.text_input("Nombre del Cliente:", placeholder="Ej. Juan Pérez")
+            telefono_cliente = st.text_input("Teléfono WhatsApp (opcional):", placeholder="Ej. 4421234567")
             
-        col_t, col_c = st.columns(2)
-        tiempo = col_t.number_input("Tiempo Láser por Pieza (min):", value=float(datos_prod["tiempo"]), min_value=0.1, step=0.5)
-        cantidad = col_c.number_input("Cantidad Pedida (piezas):", value=1, min_value=1, step=1)
+            usar_fecha_manual = st.checkbox("📅 Registrar con fecha de cotización pasada (desfasada)")
+            fecha_cotizacion_manual = datetime.date.today()
+            if usar_fecha_manual:
+                fecha_cotizacion_manual = st.date_input("Selecciona la fecha real del trato:", value=datetime.date.today())
 
+            lista_productos = list(CATALOGO.keys())
+            if "Personalizado (Medida Libre)" in lista_productos:
+                lista_productos.remove("Personalizado (Medida Libre)")
+                lista_productos.insert(0, "Personalizado (Medida Libre)")
+
+            producto_sel = st.selectbox("Elige un producto del catálogo:", lista_productos)        
+            datos_prod = CATALOGO[producto_sel]
+            
+            if datos_prod.get("foto"):
+                st.image(datos_prod["foto"], caption=producto_sel, use_container_width=True)
+            else:
+                st.info("💡 Producto personalizado sin foto asignada.")
+
+        with col_inputs:
+            st.subheader("📏 Dimensiones y Tiempos")
+            mat_keys = list(precios_materiales.keys())
+            mat_index = mat_keys.index(datos_prod["material"]) if datos_prod["material"] in mat_keys else 0
+            material = st.selectbox("Material:", mat_keys, index=mat_index)
+            
+            col_l, col_a = st.columns(2)
+            largo = col_l.number_input("Largo (cm):", value=float(datos_prod["largo"]), min_value=1.0, step=1.0)
+            ancho = col_a.number_input("Ancho (cm):", value=float(datos_prod["ancho"]), min_value=1.0, step=1.0)
+                
+            col_t, col_c = st.columns(2)
+            tiempo = col_t.number_input("Tiempo Láser por Pieza (min):", value=float(datos_prod["tiempo"]), min_value=0.1, step=0.5)
+            cantidad = col_c.number_input("Cantidad Pedida (piezas):", value=1, min_value=1, step=1)
+
+        btn_calcular = st.form_submit_button("🔄 Actualizar / Calcular Cotización", type="secondary", use_container_width=True)
+
+    # Cálculos basados en los valores seleccionados
     area_bruta = largo * ancho
     area_con_merma = area_bruta * desperdicio_factor
     costo_cm2 = precios_materiales.get(material, 0.0)
@@ -440,40 +446,47 @@ with tab_cotizador:
                 "fecha_cotizacion": f_cot_val
             }
             supabase.table("historial_cotizaciones").insert(data_cot).execute()
+            st.cache_data.clear()
             st.toast("¡Cotización guardada exitosamente!", icon="✅")
             st.success("✅ Cotización registrada.")
 
 # ------------------------------------------
-# TAB 2: HISTORIAL DE COTIZACIONES CON FILTROS, DESCARGA Y EDICIÓN CONTROLADA
+# TAB 2: HISTORIAL DE COTIZACIONES CON FILTROS Y EDICIÓN CONTROLADA
 # ------------------------------------------
 with tab_historial:
     st.header("📋 Historial de Cotizaciones Registradas")
     df_hist = cargar_historial()
     
     if not df_hist.empty:
-        # CONTROLES DE FILTRADO POR FECHA
+        # CONTROLES DE FILTRADO POR FECHA DENTRO DE UN FORMULARIO
         st.markdown("### 🔍 Filtrar Métricas y Registros")
-        f_col1, f_col2 = st.columns([2, 3])
-        
-        with f_col1:
-            filtro_tipo = st.selectbox("Filtrar por período:", ["Histórico Completo", "Por Mes", "Por Año", "Rango Personalizado"])
+        with st.form("form_filtros_historial"):
+            f_col1, f_col2 = st.columns([2, 3])
             
-        df_filtrado = df_hist.copy()
-        
+            with f_col1:
+                filtro_tipo = st.selectbox("Filtrar por período:", ["Histórico Completo", "Por Mes", "Por Año", "Rango Personalizado"])
+                
+            df_filtrado = df_hist.copy()
+            
+            if filtro_tipo == "Por Mes":
+                meses_disp = sorted(df_hist["dt_cotizacion"].dt.to_period("M").astype(str).unique(), reverse=True)
+                mes_sel = st.selectbox("Selecciona el mes:", meses_disp)
+            elif filtro_tipo == "Por Año":
+                anos_disp = sorted(df_hist["dt_cotizacion"].dt.year.unique(), reverse=True)
+                ano_sel = st.selectbox("Selecciona el año:", anos_disp)
+            elif filtro_tipo == "Rango Personalizado":
+                r_col1, r_col2 = st.columns(2)
+                f_inicio = r_col1.date_input("Fecha Inicio", value=datetime.date.today().replace(day=1))
+                f_fin = r_col2.date_input("Fecha Fin", value=datetime.date.today())
+
+            btn_aplicar_filtro = st.form_submit_button("🔍 Aplicar Filtros", use_container_width=True)
+
+        # Aplicar lógica de filtrado fuera del form
         if filtro_tipo == "Por Mes":
-            meses_disp = sorted(df_hist["dt_cotizacion"].dt.to_period("M").astype(str).unique(), reverse=True)
-            mes_sel = st.selectbox("Selecciona el mes:", meses_disp)
             df_filtrado = df_hist[df_hist["dt_cotizacion"].dt.to_period("M").astype(str) == mes_sel]
-            
         elif filtro_tipo == "Por Año":
-            anos_disp = sorted(df_hist["dt_cotizacion"].dt.year.unique(), reverse=True)
-            ano_sel = st.selectbox("Selecciona el año:", anos_disp)
             df_filtrado = df_hist[df_hist["dt_cotizacion"].dt.year == ano_sel]
-            
         elif filtro_tipo == "Rango Personalizado":
-            r_col1, r_col2 = st.columns(2)
-            f_inicio = r_col1.date_input("Fecha Inicio", value=datetime.date.today().replace(day=1))
-            f_fin = r_col2.date_input("Fecha Fin", value=datetime.date.today())
             df_filtrado = df_hist[(df_hist["dt_cotizacion"].dt.date >= f_inicio) & (df_hist["dt_cotizacion"].dt.date <= f_fin)]
 
         st.markdown("---")
@@ -606,6 +619,7 @@ with tab_admin:
             lista_prods_edit = [p for p in CATALOGO.keys() if p != "Personalizado (Medida Libre)"]
             
             if lista_prods_edit:
+                # Select fuera del form para actualizar campos dinámicamente al cambiar de producto
                 p_edit_sel = st.selectbox("Selecciona el producto a editar:", lista_prods_edit, key="sel_edit_prod")
                 dados_edit = CATALOGO[p_edit_sel]
                 
