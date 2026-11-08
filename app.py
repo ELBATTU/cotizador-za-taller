@@ -65,7 +65,6 @@ def cargar_historial():
         
         # Ajuste de hora a Zona Horaria de México (America/Mexico_City)
         dt_utc = pd.to_datetime(df["fecha"])
-        # Si no tienen zona horaria explícita, asumimos UTC y convertimos a México
         if dt_utc.dt.tz is None:
             dt_mexico = dt_utc.dt.tz_localize("UTC").dt.tz_convert(ZoneInfo("America/Mexico_City"))
         else:
@@ -82,7 +81,8 @@ def cargar_historial():
         df["dt_cotizacion"] = pd.to_datetime(df["fecha_cotizacion"], errors="coerce")
         df["dt_cotizacion"] = df["dt_cotizacion"].fillna(pd.to_datetime(df["fecha"]))
         
-        df["Fecha Cotización"] = df["dt_cotizacion"].dt.strftime("%Y-%m-%d")
+        # Guardar la fecha en formato de objeto date para el selector DateColumn
+        df["Fecha Cotización"] = df["dt_cotizacion"].dt.date
             
         cat_dict = cargar_catalogo()
         df["foto_url"] = df["producto"].map(lambda p: cat_dict.get(p, {}).get("foto"))
@@ -434,7 +434,6 @@ with tab_cotizador:
 
     with col_act3:
         if st.button("💾 Guardar en Historial", use_container_width=True, key="btn_save_cot"):
-            # Hora actual exacta de México (America/Mexico_City)
             f_ahora = datetime.datetime.now(ZoneInfo("America/Mexico_City")).isoformat()
             data_cot = {
                 "cliente": nombre_cliente.strip() if nombre_cliente.strip() else "General",
@@ -452,7 +451,7 @@ with tab_cotizador:
             st.success("✅ Cotización registrada.")
 
 # ------------------------------------------
-# TAB 2: HISTORIAL DE COTIZACIONES CON FILTROS Y VALIDACIÓN
+# TAB 2: HISTORIAL DE COTIZACIONES CON SELECTOR DE FECHA NATIVO
 # ------------------------------------------
 with tab_historial:
     st.header("📋 Historial de Cotizaciones Registradas")
@@ -492,6 +491,7 @@ with tab_historial:
         h_col3.metric("Promedio por Venta", f"${promedio_venta:,.2f} MXN")
 
         df_exportar = df_filtrado[["Fecha Cotización", "Fecha Captura", "Cliente", "Teléfono", "Producto", "Material", "Cantidad", "Precio Unitario", "Total Cobrado"]].copy()
+        df_exportar["Fecha Cotización"] = df_exportar["Fecha Cotización"].astype(str)
         csv_bytes = df_exportar.to_csv(index=False).encode('utf-8-sig')
 
         st.download_button(
@@ -504,7 +504,7 @@ with tab_historial:
         
         st.markdown("---")
         st.markdown("### ✏️ Edición Controlada (Cliente, Teléfono y Fecha de Trato)")
-        st.info("💡 Puedes modificar directamente en la tabla el **Nombre del Cliente**, **Teléfono** o la **Fecha Cotización**. Si ingresas texto inválido o letras en la fecha, se bloqueará el guardado.")
+        st.info("💡 Haz doble clic en la celda de **Fecha Cotización** para abrir el calendario interactivo. No es posible ingresar letras ni formatos no válidos.")
 
         df_editable = df_filtrado[["id", "Foto", "Fecha Cotización", "Fecha Captura", "Cliente", "Teléfono", "Producto", "Material", "Cantidad", "Precio Unitario", "Total Cobrado"]].copy()
 
@@ -516,7 +516,7 @@ with tab_historial:
             column_config={
                 "id": None,
                 "Foto": st.column_config.ImageColumn("Foto", help="Vista previa", width="small"),
-                "Fecha Cotización": st.column_config.TextColumn("Fecha Cotización (Editable YYYY-MM-DD)"),
+                "Fecha Cotización": st.column_config.DateColumn("Fecha Cotización", format="YYYY-MM-DD", help="Selecciona una fecha del calendario"),
                 "Fecha Captura": st.column_config.TextColumn("Fecha Captura (Sistema)", disabled=True),
                 "Cliente": st.column_config.TextColumn("Cliente (Editable)"),
                 "Teléfono": st.column_config.TextColumn("Teléfono (Editable)"),
@@ -528,17 +528,20 @@ with tab_historial:
             }
         )
 
-        # Detectar si hay cambios reales comparando contra el original filtrado
+        # Comparación robusta entre tipos date/string para activar el botón
         cambios_detectados = False
         for idx, row in df_editado.iterrows():
             orig = df_editable.loc[df_editable["id"] == row["id"]].iloc[0]
+            
+            f_edit_str = str(row["Fecha Cotización"]) if pd.notnull(row["Fecha Cotización"]) else ""
+            f_orig_str = str(orig["Fecha Cotización"]) if pd.notnull(orig["Fecha Cotización"]) else ""
+
             if (str(row["Cliente"]) != str(orig["Cliente"]) or
                 str(row["Teléfono"]) != str(orig["Teléfono"]) or
-                str(row["Fecha Cotización"]) != str(orig["Fecha Cotización"])):
+                f_edit_str != f_orig_str):
                 cambios_detectados = True
                 break
 
-        # Botón inteligente condicional
         if cambios_detectados:
             btn_guardar = st.button("💾 Guardar Cambios en Historial", type="primary", key="btn_save_hist")
         else:
@@ -546,32 +549,20 @@ with tab_historial:
             btn_guardar = False
 
         if btn_guardar:
-            error_formato = False
             for _, row in df_editado.iterrows():
                 if pd.notnull(row["id"]):
-                    # Validar estricto formato de fecha YYYY-MM-DD para evitar letras o texto inválido
-                    f_str = str(row["Fecha Cotización"]).strip()
-                    try:
-                        datetime.datetime.strptime(f_str, "%Y-%m-%d")
-                    except ValueError:
-                        error_formato = True
-                        st.error(f"❌ Formato de fecha inválido en el registro ID #{row['id']}: '{f_str}'. Usa estrictamente el formato YYYY-MM-DD (Ej. 2026-11-08) sin letras.")
-                        break
-
-            if not error_formato:
-                for _, row in df_editado.iterrows():
-                    if pd.notnull(row["id"]):
-                        supabase.table("historial_cotizaciones").update({
-                            "cliente": row["Cliente"],
-                            "telefono": row["Teléfono"],
-                            "fecha_cotizacion": str(row["Fecha Cotización"])
-                        }).eq("id", int(row["id"])).execute()
-                
-                st.cache_data.clear()
-                st.toast("Historial actualizado correctamente", icon="📝")
-                st.success("✅ Historial actualizado.")
-                time.sleep(1)
-                st.rerun()
+                    f_val = str(row["Fecha Cotización"]) if pd.notnull(row["Fecha Cotización"]) else datetime.date.today().isoformat()
+                    supabase.table("historial_cotizaciones").update({
+                        "cliente": row["Cliente"],
+                        "telefono": row["Teléfono"],
+                        "fecha_cotizacion": f_val
+                    }).eq("id", int(row["id"])).execute()
+            
+            st.cache_data.clear()
+            st.toast("Historial actualizado correctamente", icon="📝")
+            st.success("✅ Historial actualizado.")
+            time.sleep(1)
+            st.rerun()
     else:
         st.info("💡 Aún no hay cotizaciones guardadas.")
 
