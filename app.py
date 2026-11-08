@@ -63,7 +63,7 @@ def cargar_historial():
     if res.data:
         df = pd.DataFrame(res.data)
         
-        # Ajuste de hora a Zona Horaria de México para la Fecha de Captura
+        # Ajuste de hora a Zona Horaria de México (America/Mexico_City)
         dt_utc = pd.to_datetime(df["fecha"])
         if dt_utc.dt.tz is None:
             dt_mexico = dt_utc.dt.tz_localize("UTC").dt.tz_convert(ZoneInfo("America/Mexico_City"))
@@ -72,18 +72,15 @@ def cargar_historial():
             
         df["fecha_captura"] = dt_mexico.dt.strftime("%Y-%m-%d %H:%M")
         
-        # Respetar estrictamente la fecha_cotizacion individual de la base de datos
+        # Manejo seguro de fechas de cotización
         if "fecha_cotizacion" in df.columns:
-            # Si alguna celda viniera vacía en la DB, usa su fecha de captura, si no, respeta su valor exacto
             df["fecha_cotizacion"] = df["fecha_cotizacion"].fillna(df["fecha"])
         else:
             df["fecha_cotizacion"] = df["fecha"]
             
-        # Convertir a datetime y extraer la fecha individual limpiamente
         df["dt_cotizacion"] = pd.to_datetime(df["fecha_cotizacion"], errors="coerce")
         df["dt_cotizacion"] = df["dt_cotizacion"].fillna(pd.to_datetime(df["fecha"]))
         
-        # Asignar el objeto date exacto para cada fila
         df["Fecha Cotización"] = df["dt_cotizacion"].dt.date
             
         cat_dict = cargar_catalogo()
@@ -307,7 +304,6 @@ with tab_cotizador:
     with col_cat:
         st.subheader("🖼️ Producto & Datos Cliente")
         
-        # Inicializar estados para los inputs manuales
         if "input_cliente" not in st.session_state:
             st.session_state["input_cliente"] = ""
         if "input_telefono" not in st.session_state:
@@ -323,19 +319,19 @@ with tab_cotizador:
             lista_productos.remove("Personalizado (Medida Libre)")
             lista_productos.insert(0, "Personalizado (Medida Libre)")
 
-        # Asegurarnos de que el índice seleccionado sea válido en la lista
         try:
             default_idx = lista_productos.index(st.session_state["select_producto"])
         except ValueError:
             default_idx = 0
 
+        # Selector con búsqueda integrada y previsualización automática instantánea
         producto_sel = st.selectbox("Elige un producto del catálogo:", lista_productos, index=default_idx, key="select_producto")        
         datos_prod = CATALOGO[producto_sel]
         
         if datos_prod.get("foto"):
-            st.image(datos_prod["foto"], caption=producto_sel, use_container_width=True)
+            st.image(datos_prod["foto"], caption=f"Vista previa: {producto_sel}", use_container_width=True)
         else:
-            st.info("💡 Producto personalizado sin foto asignada.")
+            st.info("💡 Producto personalizado o sin foto asignada.")
 
     with col_inputs:
         st.subheader("📏 Dimensiones y Tiempos")
@@ -483,7 +479,7 @@ with tab_cotizador:
             st.success("✅ Cotización registrada.")
 
 # ------------------------------------------
-# TAB 2: HISTORIAL DE COTIZACIONES CON SELECTOR DE FECHA NATIVO
+# TAB 2: HISTORIAL DE COTIZACIONES
 # ------------------------------------------
 with tab_historial:
     st.header("📋 Historial de Cotizaciones Registradas")
@@ -583,10 +579,8 @@ with tab_historial:
             error_fecha_futura = False
             hoy = datetime.date.today()
             
-            # Validar que ninguna fecha editada sea del futuro
             for _, row in df_editado.iterrows():
                 if pd.notnull(row["Fecha Cotización"]):
-                    # Convertir a objeto date si viene como string
                     f_cot = row["Fecha Cotización"]
                     if isinstance(f_cot, str):
                         f_cot = datetime.datetime.strptime(f_cot, "%Y-%m-%d").date()
@@ -645,13 +639,16 @@ with tab_admin:
                 btn_add = st.form_submit_button("✨ Guardar Producto Nuevo", type="primary", use_container_width=True)
                 
                 if btn_add:
-                    if not n_p.strip():
+                    nombre_limpio = n_p.strip()
+                    if not nombre_limpio:
                         st.error("❌ El nombre del producto no puede estar vacío.")
+                    elif nombre_limpio in CATALOGO and nombre_limpio != "Personalizado (Medida Libre)":
+                        st.error(f"❌ Ya existe un producto registrado con el nombre '{nombre_limpio}'. Elige un nombre diferente para evitar duplicados.")
                     else:
                         foto_url = None
                         if foto_up:
                             file_ext = foto_up.name.split(".")[-1]
-                            file_path = f"{n_p.strip().lower().replace(' ', '_')}.{file_ext}"
+                            file_path = f"{nombre_limpio.lower().replace(' ', '_')}.{file_ext}"
                             file_bytes = foto_up.getvalue()
                             
                             try:
@@ -666,12 +663,12 @@ with tab_admin:
                             foto_url = supabase.storage.from_("productos_img").get_public_url(file_path)
 
                         supabase.table("catalogo").insert({
-                            "nombre": n_p.strip(), "largo": l_p, "ancho": a_p, 
+                            "nombre": nombre_limpio, "largo": l_p, "ancho": a_p, 
                             "tiempo": t_p, "material": m_p, "foto_url": foto_url
                         }).execute()
                         st.cache_data.clear()
-                        st.toast(f"Producto '{n_p}' registrado con éxito", icon="📦")
-                        st.success(f"✅ Producto '{n_p}' registrado correctamente.")
+                        st.toast(f"Producto '{nombre_limpio}' registrado con éxito", icon="📦")
+                        st.success(f"✅ Producto '{nombre_limpio}' registrado correctamente.")
                         time.sleep(1.2)
                         st.rerun()
 
