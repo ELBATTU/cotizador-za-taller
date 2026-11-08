@@ -489,7 +489,6 @@ with tab_historial:
         st.markdown("### ✏️ Edición Controlada (Cliente, Teléfono y Fecha de Trato)")
         st.info("💡 Puedes modificar directamente en la tabla el **Nombre del Cliente**, **Teléfono** o la **Fecha Cotización** (por si capturas algo desfasado). Los montos y productos se mantienen protegidos por seguridad.")
 
-        # Preparamos dataframe limpio para edición controlada
         df_editable = df_filtrado[["id", "Foto", "Fecha Cotización", "Fecha Captura", "Cliente", "Teléfono", "Producto", "Material", "Cantidad", "Precio Unitario", "Total Cobrado"]].copy()
 
         df_editado = st.data_editor(
@@ -515,12 +514,14 @@ with tab_historial:
         if st.button("💾 Guardar Cambios en Historial", type="primary", key="btn_save_hist"):
             for _, row in df_editado.iterrows():
                 if pd.notnull(row["id"]):
-                    # Actualizamos únicamente campos de contacto y fecha de trato
                     supabase.table("historial_cotizaciones").update({
                         "cliente": row["Cliente"],
                         "telefono": row["Teléfono"],
                         "fecha_cotizacion": str(row["Fecha Cotización"])
                     }).eq("id", int(row["id"])).execute()
+            
+            # 💡 SOLUCIÓN: Limpiar caché y forzar recarga automática inmediata
+            st.cache_data.clear()
             st.toast("Historial actualizado correctamente", icon="📝")
             st.success("✅ Historial actualizado.")
             time.sleep(1)
