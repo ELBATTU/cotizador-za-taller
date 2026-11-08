@@ -285,16 +285,33 @@ tab_cotizador, tab_historial, tab_admin = st.tabs([
 # TAB 1: COTIZADOR INTERACTIVO
 # ------------------------------------------
 with tab_cotizador:
-    st.markdown("<h1 style='color: #1E88E5;'>Z&A Taller Creativo</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='font-size: 18px; color: #888;'>Cotizador Interactivo - Corte & Grabado Láser CNC</p>", unsafe_allow_html=True)
+    title_col1, title_col2 = st.columns([3, 1])
+    with title_col1:
+        st.markdown("<h1 style='color: #1E88E5; margin-bottom: 0;'>Z&A Taller Creativo</h1>", unsafe_allow_html=True)
+        st.markdown("<p style='font-size: 18px; color: #888;'>Cotizador Interactivo - Corte & Grabado Láser CNC</p>", unsafe_allow_html=True)
+    with title_col2:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("🔄 Nueva Cotización", use_container_width=True, type="secondary"):
+            st.session_state["input_cliente"] = ""
+            st.session_state["input_telefono"] = ""
+            st.session_state["input_cantidad"] = 1
+            st.rerun()
+
     st.markdown("---")
 
     col_cat, col_inputs = st.columns([1, 1.2])
 
     with col_cat:
         st.subheader("🖼️ Producto & Datos Cliente")
-        nombre_cliente = st.text_input("Nombre del Cliente:", placeholder="Ej. Juan Pérez")
-        telefono_cliente = st.text_input("Teléfono WhatsApp (opcional):", placeholder="Ej. 4421234567")
+        
+        # Inicializar keys en session_state si no existen para que el botón de limpiar funcione
+        if "input_cliente" not in st.session_state:
+            st.session_state["input_cliente"] = ""
+        if "input_telefono" not in st.session_state:
+            st.session_state["input_telefono"] = ""
+
+        nombre_cliente = st.text_input("Nombre del Cliente:", placeholder="Ej. Juan Pérez", key="input_cliente")
+        telefono_cliente = st.text_input("Teléfono WhatsApp (opcional):", placeholder="Ej. 4421234567", key="input_telefono")
 
         lista_productos = list(CATALOGO.keys())
         if "Personalizado (Medida Libre)" in lista_productos:
@@ -321,7 +338,11 @@ with tab_cotizador:
             
         col_t, col_c = st.columns(2)
         tiempo = col_t.number_input("Tiempo Láser por Pieza (min):", value=float(datos_prod["tiempo"]), min_value=0.1, step=0.5)
-        cantidad = col_c.number_input("Cantidad Pedida (piezas):", value=1, min_value=1, step=1)
+        
+        if "input_cantidad" not in st.session_state:
+            st.session_state["input_cantidad"] = 1
+            
+        cantidad = col_c.number_input("Cantidad Pedida (piezas):", min_value=1, step=1, key="input_cantidad")
 
     area_bruta = largo * ancho
     area_con_merma = area_bruta * desperdicio_factor
@@ -528,7 +549,6 @@ with tab_historial:
             }
         )
 
-        # Comparación robusta entre tipos date/string para activar el botón
         cambios_detectados = False
         for idx, row in df_editado.iterrows():
             orig = df_editable.loc[df_editable["id"] == row["id"]].iloc[0]
