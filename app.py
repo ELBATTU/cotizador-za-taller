@@ -58,16 +58,17 @@ def cargar_catalogo():
     return cat_dict
 
 def cargar_historial():
+    # Coincide exactamente con tu columna 'fecha' en Supabase
     res = supabase.table("historial_cotizaciones").select("*").order("fecha", desc=True).execute()
     if res.data:
         df = pd.DataFrame(res.data)
-        df["fecha"] = pd.to_datetime(df["fecha"]).dt.strftime("%Y-%m-%d %H:%M")
+        df["Fecha"] = pd.to_datetime(df["fecha"]).dt.strftime("%Y-%m-%d %H:%M")
         
         cat_dict = cargar_catalogo()
         df["foto_url"] = df["producto"].map(lambda p: cat_dict.get(p, {}).get("foto"))
         
         df.rename(columns={
-            "fecha": "Fecha", "cliente": "Cliente", "telefono": "Teléfono",
+            "cliente": "Cliente", "telefono": "Teléfono",
             "producto": "Producto", "material": "Material", "cantidad": "Cantidad",
             "precio_unitario": "Precio Unitario", "total_cobrado": "Total Cobrado",
             "foto_url": "Foto"
@@ -419,48 +420,88 @@ with tab_cotizador:
                 "material": material,
                 "cantidad": cantidad,
                 "precio_unitario": round(precio_unitario_final, 2),
-                "total_cobrado": round(precio_total_neto, 2)
+                "total_cobrado": round(precio_total_neto, 2),
+                "fecha": datetime.datetime.now().isoformat()
             }
             supabase.table("historial_cotizaciones").insert(data_cot).execute()
             st.toast("¡Cotización guardada exitosamente!", icon="✅")
             st.success("✅ Cotización registrada.")
 
 # ------------------------------------------
-# TAB 2: HISTORIAL DE COTIZACIONES (SOLO LECTURA SEGURO)
+# TAB 2: HISTORIAL DE COTIZACIONES CON FILTROS Y EDICIÓN SEGURA
 # ------------------------------------------
 with tab_historial:
     st.header("📋 Historial de Cotizaciones Registradas")
-    st.markdown("Visualización de las cotizaciones emitidas por el taller (modo consulta protegida).")
     
     df_historial = cargar_historial()
     
     if not df_historial.empty:
-        h_col1, h_col2, h_col3 = st.columns(3)
-        h_col1.metric("Total Cotizaciones", len(df_historial))
-        h_col2.metric("Monto Total Cotizado", f"${df_historial['Total Cobrado'].sum():,.2f} MXN")
-        h_col3.metric("Promedio por Venta", f"${df_historial['Total Cobrado'].mean():,.2f} MXN")
+        df_historial["_dt"] = pd.to_datetime(df_historial["Fecha"])
+        
+        st.markdown("### 🔍 Filtrar Período")
+        f_col1, f_col2, f_col3 = st.columns([1, 1, 2])
+        
+        tipo_filtro = f_col1.selectbox("Ver por:", ["Todo el Historial", "Mes Actual", "Año Actual", "Rango Personalizado"])
+        
+        df_filtrado = df_historial.copy()
+        now = datetime.datetime.now()
+        
+        if tipo_filtro == "Mes Actual":
+            df_filtrado = df_filtrado[(df_filtrado["_dt"].dt.year == now.year) & (df_filtrado["_dt"].dt.month == now.month)]
+        elif tipo_filtro == "Año Actual":
+            df_filtrado = df_filtrado[df_filtrado["_dt"].dt.year == now.year]
+        elif tipo_filtro == "Rango Personalizado":
+            d_inicio = f_col2.date_input("Desde:", value=datetime.date(now.year, 1, 1))
+            d_fin = f_col3.date_input("Hasta:", value=datetime.date.today())
+            df_filtrado = df_filtrado[(df_filtrado["_dt"].dt.date >= d_inicio) & (df_filtrado["_dt"].dt.date <= d_fin)]
+
+        st.markdown("---")
+        m_col1, m_col2, m_col3 = st.columns(3)
+        total_cot = len(df_filtrado)
+        monto_tot = df_filtrado["Total Cobrado"].sum() if total_cot > 0 else 0.0
+        prom_vent = df_filtrado["Total Cobrado"].mean() if total_cot > 0 else 0.0
+        
+        m_col1.metric("Total Cotizaciones (Filtrado)", total_cot)
+        m_col2.metric("Monto Total Cotizado", f"${monto_tot:,.2f} MXN")
+        m_col3.metric("Promedio por Venta", f"${prom_vent:,.2f} MXN")
         st.markdown("---")
 
-        # Tabla de solo lectura con imágenes miniatura y formato monetario
-        st.dataframe(
-            df_historial,
+        st.info("💡 **Nota de seguridad:** Puedes corregir directamente en la tabla los datos de **Cliente** y **Teléfono** si hubo un error de dedo. Los montos y productos están protegidos para mantener las finanzas del taller correctas.")
+
+        df_para_editar = df_filtrado.drop(columns=["_dt"])
+
+        df_editado = st.data_editor(
+            df_para_editar,
             use_container_width=True,
-            hide_index=True,
+            num_rows="fixed",
+            key="editor_historial_seguro",
             column_config={
                 "id": None,
-                "Foto": st.column_config.ImageColumn("Foto", help="Vista previa del producto en catálogo", width="small"),
-                "Fecha": st.column_config.TextColumn("Fecha"),
-                "Cliente": st.column_config.TextColumn("Cliente"),
-                "Teléfono": st.column_config.TextColumn("Teléfono"),
-                "Producto": st.column_config.TextColumn("Producto"),
-                "Material": st.column_config.TextColumn("Material"),
-                "Cantidad": st.column_config.NumberColumn("Cantidad", format="%d"),
-                "Precio Unitario": st.column_config.NumberColumn("Precio Unitario", format="$%.2f"),
-                "Total Cobrado": st.column_config.NumberColumn("Total Cobrado", format="$%.2f")
+                "Foto": st.column_config.ImageColumn("Foto", help="Vista previa del producto", width="small"),
+                "Fecha": st.column_config.TextColumn("Fecha", disabled=True),
+                "Cliente": st.column_config.TextColumn("Cliente (Editable)"),
+                "Teléfono": st.column_config.TextColumn("Teléfono (Editable)"),
+                "Producto": st.column_config.TextColumn("Producto", disabled=True),
+                "Material": st.column_config.TextColumn("Material", disabled=True),
+                "Cantidad": st.column_config.NumberColumn("Cantidad", format="%d", disabled=True),
+                "Precio Unitario": st.column_config.NumberColumn("Precio Unitario", format="$%.2f", disabled=True),
+                "Total Cobrado": st.column_config.NumberColumn("Total Cobrado", format="$%.2f", disabled=True)
             }
         )
+
+        if st.button("💾 Guardar Cambios de Contacto", type="primary", key="btn_save_hist"):
+            for _, row in df_editado.iterrows():
+                if pd.notnull(row["id"]):
+                    supabase.table("historial_cotizaciones").update({
+                        "cliente": row["Cliente"],
+                        "telefono": row["Teléfono"]
+                    }).eq("id", row["id"]).execute()
+            st.toast("Datos de cliente actualizados correctamente", icon="📝")
+            st.success("✅ Cambios de contacto guardados.")
+            time.sleep(1)
+            st.rerun()
     else:
-        st.info("💡 Aún no hay cotizaciones guardadas.")
+        st.info("💡 Aún no hay cotizaciones guardadas en este período.")
 
 # ------------------------------------------
 # TAB 3: PANEL DE ADMINISTRACIÓN
