@@ -61,18 +61,20 @@ def cargar_historial():
     res = supabase.table("historial_cotizaciones").select("*").order("fecha", desc=True).execute()
     if res.data:
         df = pd.DataFrame(res.data)
-        df["fecha"] = pd.to_datetime(df["fecha"]).dt.strftime("%Y-%m-%d %H:%M")
+        # Conservar fecha original en datetime para filtros precisos
+        df["fecha_dt"] = pd.to_datetime(df["fecha"])
+        df["Fecha"] = df["fecha_dt"].dt.strftime("%Y-%m-%d %H:%M")
         
         cat_dict = cargar_catalogo()
         df["foto_url"] = df["producto"].map(lambda p: cat_dict.get(p, {}).get("foto"))
         
         df.rename(columns={
-            "fecha": "Fecha", "cliente": "Cliente", "telefono": "Teléfono",
+            "cliente": "Cliente", "telefono": "Teléfono",
             "producto": "Producto", "material": "Material", "cantidad": "Cantidad",
             "precio_unitario": "Precio Unitario", "total_cobrado": "Total Cobrado",
             "foto_url": "Foto"
         }, inplace=True)
-        return df[["id", "Foto", "Fecha", "Cliente", "Teléfono", "Producto", "Material", "Cantidad", "Precio Unitario", "Total Cobrado"]]
+        return df[["id", "Foto", "Fecha", "fecha_dt", "Cliente", "Teléfono", "Producto", "Material", "Cantidad", "Precio Unitario", "Total Cobrado"]]
     return pd.DataFrame()
 
 # Carga inicial
@@ -426,24 +428,72 @@ with tab_cotizador:
             st.success("✅ Cotización registrada.")
 
 # ------------------------------------------
-# TAB 2: HISTORIAL DE COTIZACIONES (SOLO LECTURA SEGURO)
+# TAB 2: HISTORIAL DE COTIZACIONES CON FILTROS TEMPORALES
 # ------------------------------------------
 with tab_historial:
     st.header("📋 Historial de Cotizaciones Registradas")
-    st.markdown("Visualización de las cotizaciones emitidas por el taller (modo consulta protegida).")
     
     df_historial = cargar_historial()
     
     if not df_historial.empty:
-        h_col1, h_col2, h_col3 = st.columns(3)
-        h_col1.metric("Total Cotizaciones", len(df_historial))
-        h_col2.metric("Monto Total Cotizado", f"${df_historial['Total Cobrado'].sum():,.2f} MXN")
-        h_col3.metric("Promedio por Venta", f"${df_historial['Total Cobrado'].mean():,.2f} MXN")
+        # Filtros temporales en la parte superior
+        st.markdown("### ⏱️ Filtrar por Periodo")
+        f_col1, f_col2 = st.columns([2, 2])
+        
+        with f_col1:
+            filtro_tipo = st.selectbox(
+                "Ver métricas e historial por:", 
+                ["Todo el Historial", "Año Específico", "Mes Específico", "Semana Actual / Reciente"]
+            )
+            
+        df_filtrado = df_historial.copy()
+        
+        # Lógica de filtrado de acuerdo a la selección
+        now = datetime.datetime.now()
+        if filtro_tipo == "Año Específico":
+            anos_disponibles = sorted(df_historial["fecha_dt"].dt.year.unique(), reverse=True)
+            ano_sel = st.selectbox("Selecciona el Año:", anos_disponibles)
+            df_filtrado = df_historial[df_historial["fecha_dt"].dt.year == ano_sel]
+            
+        elif filtro_tipo == "Mes Específico":
+            col_m1, col_m2 = st.columns(2)
+            anos_disponibles = sorted(df_historial["fecha_dt"].dt.year.unique(), reverse=True)
+            ano_sel = col_m1.selectbox("Año:", anos_disponibles, key="ano_mes")
+            
+            meses_nombres = {
+                1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio",
+                7: "Julio", 8: "Agosto", 9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
+            }
+            mes_sel_nombre = col_m2.selectbox("Mes:", list(meses_nombres.values()))
+            mes_sel_num = [k for k, v in meses_nombres.items() if v == mes_sel_nombre][0]
+            
+            df_filtrado = df_historial[
+                (df_historial["fecha_dt"].dt.year == ano_sel) & 
+                (df_historial["fecha_dt"].dt.month == mes_sel_num)
+            ]
+            
+        elif filtro_tipo == "Semana Actual / Reciente":
+            # Filtro de los últimos 7 días
+            hace_7_dias = now - datetime.timedelta(days=7)
+            df_filtrado = df_historial[df_historial["fecha_dt"] >= hace_7_dias]
+
         st.markdown("---")
 
-        # Tabla de solo lectura con imágenes miniatura y formato monetario
+        # Métricas dinámicas calculadas sobre el periodo seleccionado
+        h_col1, h_col2, h_col3 = st.columns(3)
+        total_monto = df_filtrado['Total Cobrado'].sum() if not df_filtrado.empty else 0.0
+        promedio_venta = df_filtrado['Total Cobrado'].mean() if not df_filtrado.empty else 0.0
+        
+        h_col1.metric("Cotizaciones en el Periodo", len(df_filtrado))
+        h_col2.metric("Monto Total Cotizado", f"${total_monto:,.2f} MXN")
+        h_col3.metric("Promedio por Venta", f"${promedio_venta:,.2f} MXN")
+        
+        st.markdown("---")
+
+        # Tabla limpia de solo lectura con las imágenes y datos filtrados
+        df_mostrar = df_filtrado.drop(columns=["fecha_dt"])
         st.dataframe(
-            df_historial,
+            df_mostrar,
             use_container_width=True,
             hide_index=True,
             column_config={
