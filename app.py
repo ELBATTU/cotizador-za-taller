@@ -5,7 +5,7 @@ import urllib.parse
 import time
 import io
 import os
-from PIL import Image
+from PIL import Image as PILImage
 from supabase import create_client, Client
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
@@ -13,7 +13,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
 # Desactivar límite de píxeles para imágenes grandes
-Image.MAX_IMAGE_PIXELS = None
+PILImage.MAX_IMAGE_PIXELS = None
 
 # ==========================================
 # CONFIGURACIÓN DE PÁGINA
@@ -80,7 +80,7 @@ precios_materiales = cargar_materiales()
 CATALOGO = cargar_catalogo()
 
 # ==========================================
-# GENERADOR DE PDF PROFESIONAL CON LOGOTIPO
+# GENERADOR DE PDF CON COLORES DEL LOGO Y ASPECTO PROPORCIONAL
 # ==========================================
 def generar_pdf_cotizacion(datos_pdf):
     buffer = io.BytesIO()
@@ -88,30 +88,46 @@ def generar_pdf_cotizacion(datos_pdf):
     elements = []
     styles = getSampleStyleSheet()
 
-    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=18, textColor=colors.HexColor('#1E88E5'))
-    subtitle_style = ParagraphStyle('SubTitleStyle', parent=styles['Normal'], fontName='Helvetica', fontSize=9, textColor=colors.HexColor('#666666'))
-    body_style = ParagraphStyle('BodyStyle', parent=styles['Normal'], fontName='Helvetica', fontSize=10, textColor=colors.HexColor('#333333'))
-    bold_style = ParagraphStyle('BoldStyle', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=10, textColor=colors.HexColor('#333333'))
+    # Colores corporativos extraídos del logotipo (Tonos Madera / Café / Crema)
+    COLOR_PRINCIPAL = colors.HexColor('#5C3A21')  # Café madera oscuro
+    COLOR_SECUNDARIO = colors.HexColor('#8C5830') # Café claro / caramelo
+    COLOR_FONDO = colors.HexColor('#F4EAD5')      # Crema suave
+    COLOR_TEXTO = colors.HexColor('#2B1A0E')      # Texto casi negro/café muy oscuro
 
-    # Validar si existe el logo.png en la raíz del proyecto
-    logo_path = "logo.png"
-    if os.path.exists(logo_path):
-        # Redimensionar la imagen para que encaje bien en el PDF (ej. ancho 70 puntos)
-        img_logo = RLImage(logo_path, width=70, height=70)
-        img_logo.hAlign = 'LEFT'
-        header_col1 = [img_logo, Paragraph("<b>Z&A TALLER CREATIVO</b><br/>Corte & Grabado Láser CNC<br/>Contacto: taller@zataller.com", subtitle_style)]
+    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=16, textColor=COLOR_PRINCIPAL)
+    subtitle_style = ParagraphStyle('SubTitleStyle', parent=styles['Normal'], fontName='Helvetica', fontSize=9, textColor=COLOR_SECUNDARIO)
+    body_style = ParagraphStyle('BodyStyle', parent=styles['Normal'], fontName='Helvetica', fontSize=10, textColor=COLOR_TEXTO)
+    bold_style = ParagraphStyle('BoldStyle', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=10, textColor=COLOR_TEXTO)
+
+    # Buscar logo.png o logo.jpg y calcular su relación de aspecto original
+    logo_widget = None
+    for filename in ["logo.png", "logo.jpg", "logo.jpeg"]:
+        if os.path.exists(filename):
+            try:
+                with PILImage.open(filename) as im:
+                    orig_w, orig_h = im.size
+                target_w = 75  # Ancho fijo en puntos para el PDF
+                target_h = target_w * (orig_h / orig_w)  # Altura proporcional automática
+                logo_widget = RLImage(filename, width=target_w, height=target_h)
+                logo_widget.hAlign = 'LEFT'
+            except Exception:
+                pass
+            break
+
+    if logo_widget:
+        header_col1 = [logo_widget, Spacer(1, 4), Paragraph("<b>Z&A TALLER CREATIVO</b><br/>Corte & Grabado Láser CNC<br/>MDF & CNC | Taller Creativo", subtitle_style)]
     else:
-        header_col1 = [Paragraph("<b>Z&A TALLER CREATIVO</b><br/>Corte & Grabado Láser CNC<br/>Contacto: taller@zataller.com", title_style)]
+        header_col1 = [Paragraph("<b>Z&A TALLER CREATIVO</b><br/>Corte & Grabado Láser CNC", title_style)]
 
     header_data = [
         [
             header_col1,
-            Paragraph(f"<b>COTIZACIÓN DE VENTA</b><br/>Fecha: {datetime.datetime.now().strftime('%d/%m/%Y')}<br/>Vigencia: 15 días", subtitle_style)
+            Paragraph(f"<b>COTIZACIÓN DE VENTA</b><br/><b>Fecha:</b> {datetime.datetime.now().strftime('%d/%m/%Y')}<br/><b>Vigencia:</b> 15 días", subtitle_style)
         ]
     ]
     
     header_table = Table(header_data, colWidths=[330, 210])
-    header_table.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'MIDDLE')]))
+    header_table.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'TOP')]))
     elements.append(header_table)
     elements.append(Spacer(1, 15))
 
@@ -120,8 +136,9 @@ def generar_pdf_cotizacion(datos_pdf):
     ]
     info_table = Table(cliente_info, colWidths=[300, 240])
     info_table.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F0F2F6')),
+        ('BACKGROUND', (0,0), (-1,-1), COLOR_FONDO),
         ('PADDING', (0,0), (-1,-1), 8),
+        ('BOX', (0,0), (-1,-1), 0.5, COLOR_SECUNDARIO)
     ]))
     elements.append(info_table)
     elements.append(Spacer(1, 15))
@@ -140,20 +157,20 @@ def generar_pdf_cotizacion(datos_pdf):
 
     prod_table = Table(table_data, colWidths=[140, 100, 100, 50, 80, 70])
     prod_table.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1E88E5')),
+        ('BACKGROUND', (0,0), (-1,0), COLOR_PRINCIPAL),
         ('TEXTCOLOR', (0,0), (-1,0), colors.white),
         ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
         ('FONTSIZE', (0,0), (-1,0), 9),
         ('ALIGN', (0,0), (-1,-1), 'CENTER'),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#DDDDDD')),
+        ('GRID', (0,0), (-1,-1), 0.5, COLOR_SECUNDARIO),
         ('PADDING', (0,0), (-1,-1), 8),
     ]))
     elements.append(prod_table)
     elements.append(Spacer(1, 20))
 
     total_data = [
-        ["", Paragraph(f"<b>TOTAL A PAGAR:</b> <font color='#1E88E5' size='12'><b>${datos_pdf['total']:,.2f} MXN</b></font>", bold_style)]
+        ["", Paragraph(f"<b>TOTAL A PAGAR:</b> <font color='#5C3A21' size='12'><b>${datos_pdf['total']:,.2f} MXN</b></font>", bold_style)]
     ]
     total_table = Table(total_data, colWidths=[300, 240])
     total_table.setStyle(TableStyle([('ALIGN', (1,0), (1,0), 'RIGHT')]))
@@ -167,27 +184,27 @@ def generar_pdf_cotizacion(datos_pdf):
     return buffer
 
 # ==========================================
-# ESTILOS VISUALES CSS
+# ESTILOS VISUALES CSS DE LA APLICACIÓN
 # ==========================================
 st.markdown("""
     <style>
-    .main-title { font-size: 32px; font-weight: bold; color: #1E88E5; }
+    .main-title { font-size: 32px; font-weight: bold; color: #5C3A21; }
     div[data-testid="stImage"] img {
         max-height: 380px; width: 100%; object-fit: contain; border-radius: 10px;
     }
     table { width: 100%; border-collapse: collapse; margin: 10px 0; }
     th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #ddd; }
-    th { background-color: #f0f2f6; color: #333; }
+    th { background-color: #F4EAD5; color: #5C3A21; }
     
     .card-tech {
         background-color: #F8F9FA;
-        border-left: 5px solid #1E88E5;
+        border-left: 5px solid #5C3A21;
         padding: 15px;
         border-radius: 8px;
         margin-bottom: 12px;
         color: #212529;
     }
-    .card-tech h4 { margin: 0 0 10px 0; color: #1E88E5; font-size: 16px; }
+    .card-tech h4 { margin: 0 0 10px 0; color: #5C3A21; font-size: 16px; }
     .tech-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 14px; }
     </style>
 """, unsafe_allow_html=True)
@@ -223,7 +240,7 @@ if not verificar_password():
 # BARRA LATERAL
 # ==========================================
 with st.sidebar:
-    st.markdown("<h2 style='text-align: center; color: #4A90E2;'>Z&A TALLER CREATIVO</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; color: #5C3A21;'>Z&A TALLER CREATIVO</h2>", unsafe_allow_html=True)
     if st.button("🔒 Cerrar Sesión", use_container_width=True, key="btn_logout_sidebar"):
         st.session_state["autenticado"] = False
         st.rerun()
@@ -248,7 +265,7 @@ tab_cotizador, tab_historial, tab_admin = st.tabs([
 # TAB 1: COTIZADOR INTERACTIVO
 # ------------------------------------------
 with tab_cotizador:
-    st.markdown("<h1 style='color: #1E88E5;'>Z&A Taller Creativo</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='color: #5C3A21;'>Z&A Taller Creativo</h1>", unsafe_allow_html=True)
     st.markdown("<p style='font-size: 18px; color: #888;'>Cotizador Interactivo - Corte & Grabado Láser CNC</p>", unsafe_allow_html=True)
     st.markdown("---")
 
@@ -321,7 +338,7 @@ with tab_cotizador:
                 <div class='tech-row'><span>Área (+10% Merma):</span> <b>{area_con_merma:,.1f} cm²</b></div>
                 <div class='tech-row'><span>Costo cm²:</span> <b>${costo_cm2:,.4f} MXN</b></div>
                 <hr style='margin: 8px 0;'>
-                <div class='tech-row'><span>Subtotal Material (1 pz):</span> <b style='color:#2E7D32;'>${costo_mat_unitario:,.2f} MXN</b></div>
+                <div class='tech-row'><span>Subtotal Material (1 pz):</span> <b style='color:#5C3A21;'>${costo_mat_unitario:,.2f} MXN</b></div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -333,7 +350,7 @@ with tab_cotizador:
                 <div class='tech-row'><span>Tarifa Láser:</span> <b>${tarifa_minuto:,.2f} / min</b></div>
                 <div class='tech-row'><span>Tiempo Total Lote:</span> <b>{(tiempo * cantidad):,.1f} min</b></div>
                 <hr style='margin: 8px 0;'>
-                <div class='tech-row'><span>Subtotal Máquina (1 pz):</span> <b style='color:#2E7D32;'>${costo_maq_unitario:,.2f} MXN</b></div>
+                <div class='tech-row'><span>Subtotal Máquina (1 pz):</span> <b style='color:#5C3A21;'>${costo_maq_unitario:,.2f} MXN</b></div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -345,7 +362,7 @@ with tab_cotizador:
                 <div class='tech-row'><span>Costo Total Lote:</span> <b>${costo_total_lote:,.2f} MXN</b></div>
                 <div class='tech-row'><span>Descuento Aplicado:</span> <b>{int(descuento_pct * 100)}%</b></div>
                 <hr style='margin: 8px 0;'>
-                <div class='tech-row'><span>Ganancia Neta Estimada:</span> <b style='color:#1565C0;'>${utilidad_total_lote:,.2f} MXN</b></div>
+                <div class='tech-row'><span>Ganancia Neta Estimada:</span> <b style='color:#5C3A21;'>${utilidad_total_lote:,.2f} MXN</b></div>
             </div>
             """, unsafe_allow_html=True)
 
