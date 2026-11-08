@@ -464,23 +464,23 @@ with tab_cotizador:
             use_container_width=True
         )
 
-    with col_act3:
-        if st.button("💾 Guardar en Historial", use_container_width=True, key="btn_save_cot"):
-            f_ahora = datetime.datetime.now(ZoneInfo("America/Mexico_City")).strftime("%Y-%m-%d")
-            data_cot = {
-                "cliente": nombre_cliente.strip() if nombre_cliente.strip() else "General",
-                "telefono": telefono_cliente.strip(),
-                "producto": producto_sel,
-                "material": material,
-                "cantidad": cantidad,
-                "precio_unitario": round(precio_unitario_final, 2),
-                "total_cobrado": round(precio_total_neto, 2),
-                "fecha_cotizacion": f_ahora
-            }
-            supabase.table("historial_cotizaciones").insert(data_cot).execute()
-            st.cache_data.clear()
-            st.toast("¡Cotización guardada exitosamente!", icon="✅")
-            st.success("✅ Cotización registrada.")
+    with st.button("💾 Guardar en Historial", use_container_width=True, key="btn_save_cot"):
+                # Guardar solo la fecha limpia (YYYY-MM-DD) para que no se mezcle con la hora exacta de captura
+                f_ahora = datetime.datetime.now(ZoneInfo("America/Mexico_City")).strftime("%Y-%m-%d")
+                data_cot = {
+                    "cliente": nombre_cliente.strip() if nombre_cliente.strip() else "General",
+                    "telefono": telefono_cliente.strip(),
+                    "producto": producto_sel,
+                    "material": material,
+                    "cantidad": cantidad,
+                    "precio_unitario": round(precio_unitario_final, 2),
+                    "total_cobrado": round(precio_total_neto, 2),
+                    "fecha_cotizacion": f_ahora
+                }
+                supabase.table("historial_cotizaciones").insert(data_cot).execute()
+                st.cache_data.clear()
+                st.toast("¡Cotización guardada exitosamente!", icon="✅")
+                st.success("✅ Cotización registrada.")
 
 # ------------------------------------------
 # TAB 2: HISTORIAL DE COTIZACIONES CON SELECTOR DE FECHA NATIVO
