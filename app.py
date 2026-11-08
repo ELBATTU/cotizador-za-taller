@@ -62,18 +62,21 @@ def cargar_historial():
     if res.data:
         df = pd.DataFrame(res.data)
         
-        # 1. Procesar la fecha de captura del sistema de forma segura
-        dt_cap = pd.to_datetime(df["fecha"], errors='coerce', utc=True)
+        # 1. Procesar la Fecha de Captura (Sistema)
+        dt_cap = pd.to_datetime(df["fecha"], errors='coerce')
+        if dt_cap.dt.tz is None:
+            dt_cap = dt_cap.dt.tz_localize("UTC", nonexistent='shift_forward', ambiguous='NaT')
         dt_cap_mex = dt_cap.dt.tz_convert("America/Mexico_City")
         df["fecha_captura"] = dt_cap_mex.dt.strftime("%Y-%m-%d %H:%M").fillna("-")
         
-        # 2. Procesar la fecha de cotización (trato) leyendo directamente de Supabase
+        # 2. Procesar la Fecha de Cotización (Trato real) respetando cada registro individual
         if "fecha_cotizacion" in df.columns:
-            # utc=True asegura que entienda perfectamente los formatos tipo '2026-08-08 06:00:00+00'
-            dt_cot = pd.to_datetime(df["fecha_cotizacion"], errors='coerce', utc=True)
+            dt_cot = pd.to_datetime(df["fecha_cotizacion"], errors='coerce')
+            if dt_cot.dt.tz is None:
+                dt_cot = dt_cot.dt.tz_localize("UTC", nonexistent='shift_forward', ambiguous='NaT')
             dt_cot_mex = dt_cot.dt.tz_convert("America/Mexico_City")
             
-            # Si alguna celda viniera vacía, respaldamos con la fecha de captura
+            # Si una fila tuviera fecha nula, respaldamos únicamente esa con su propia fecha de captura
             df["dt_cotizacion"] = dt_cot_mex.fillna(dt_cap_mex)
             df["Fecha Cotización"] = df["dt_cotizacion"].dt.strftime("%Y-%m-%d").fillna("-")
         else:
