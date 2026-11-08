@@ -88,11 +88,11 @@ def generar_pdf_cotizacion(datos_pdf):
     elements = []
     styles = getSampleStyleSheet()
 
-    # Colores corporativos extraídos del logotipo (Tonos Madera / Café / Crema)
+    # Colores corporativos exclusivos para el PDF
     COLOR_PRINCIPAL = colors.HexColor('#5C3A21')  # Café madera oscuro
     COLOR_SECUNDARIO = colors.HexColor('#8C5830') # Café claro / caramelo
     COLOR_FONDO = colors.HexColor('#F4EAD5')      # Crema suave
-    COLOR_TEXTO = colors.HexColor('#2B1A0E')      # Texto casi negro/café muy oscuro
+    COLOR_TEXTO = colors.HexColor('#2B1A0E')      # Texto café muy oscuro
 
     title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=16, textColor=COLOR_PRINCIPAL)
     subtitle_style = ParagraphStyle('SubTitleStyle', parent=styles['Normal'], fontName='Helvetica', fontSize=9, textColor=COLOR_SECUNDARIO)
@@ -106,7 +106,7 @@ def generar_pdf_cotizacion(datos_pdf):
             try:
                 with PILImage.open(filename) as im:
                     orig_w, orig_h = im.size
-                target_w = 75  # Ancho fijo en puntos para el PDF
+                target_w = 75  # Ancho fijo en puntos
                 target_h = target_w * (orig_h / orig_w)  # Altura proporcional automática
                 logo_widget = RLImage(filename, width=target_w, height=target_h)
                 logo_widget.hAlign = 'LEFT'
@@ -184,27 +184,27 @@ def generar_pdf_cotizacion(datos_pdf):
     return buffer
 
 # ==========================================
-# ESTILOS VISUALES CSS DE LA APLICACIÓN
+# ESTILOS VISUALES CSS (INTERFAZ WEB ORIGINAL RESTAURADA)
 # ==========================================
 st.markdown("""
     <style>
-    .main-title { font-size: 32px; font-weight: bold; color: #5C3A21; }
+    .main-title { font-size: 32px; font-weight: bold; color: #1E88E5; }
     div[data-testid="stImage"] img {
         max-height: 380px; width: 100%; object-fit: contain; border-radius: 10px;
     }
     table { width: 100%; border-collapse: collapse; margin: 10px 0; }
     th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #ddd; }
-    th { background-color: #F4EAD5; color: #5C3A21; }
+    th { background-color: #f0f2f6; color: #333; }
     
     .card-tech {
         background-color: #F8F9FA;
-        border-left: 5px solid #5C3A21;
+        border-left: 5px solid #1E88E5;
         padding: 15px;
         border-radius: 8px;
         margin-bottom: 12px;
         color: #212529;
     }
-    .card-tech h4 { margin: 0 0 10px 0; color: #5C3A21; font-size: 16px; }
+    .card-tech h4 { margin: 0 0 10px 0; color: #1E88E5; font-size: 16px; }
     .tech-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 14px; }
     </style>
 """, unsafe_allow_html=True)
@@ -240,7 +240,7 @@ if not verificar_password():
 # BARRA LATERAL
 # ==========================================
 with st.sidebar:
-    st.markdown("<h2 style='text-align: center; color: #5C3A21;'>Z&A TALLER CREATIVO</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; color: #4A90E2;'>Z&A TALLER CREATIVO</h2>", unsafe_allow_html=True)
     if st.button("🔒 Cerrar Sesión", use_container_width=True, key="btn_logout_sidebar"):
         st.session_state["autenticado"] = False
         st.rerun()
@@ -265,7 +265,7 @@ tab_cotizador, tab_historial, tab_admin = st.tabs([
 # TAB 1: COTIZADOR INTERACTIVO
 # ------------------------------------------
 with tab_cotizador:
-    st.markdown("<h1 style='color: #5C3A21;'>Z&A Taller Creativo</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='color: #1E88E5;'>Z&A Taller Creativo</h1>", unsafe_allow_html=True)
     st.markdown("<p style='font-size: 18px; color: #888;'>Cotizador Interactivo - Corte & Grabado Láser CNC</p>", unsafe_allow_html=True)
     st.markdown("---")
 
@@ -338,7 +338,7 @@ with tab_cotizador:
                 <div class='tech-row'><span>Área (+10% Merma):</span> <b>{area_con_merma:,.1f} cm²</b></div>
                 <div class='tech-row'><span>Costo cm²:</span> <b>${costo_cm2:,.4f} MXN</b></div>
                 <hr style='margin: 8px 0;'>
-                <div class='tech-row'><span>Subtotal Material (1 pz):</span> <b style='color:#5C3A21;'>${costo_mat_unitario:,.2f} MXN</b></div>
+                <div class='tech-row'><span>Subtotal Material (1 pz):</span> <b style='color:#2E7D32;'>${costo_mat_unitario:,.2f} MXN</b></div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -350,7 +350,7 @@ with tab_cotizador:
                 <div class='tech-row'><span>Tarifa Láser:</span> <b>${tarifa_minuto:,.2f} / min</b></div>
                 <div class='tech-row'><span>Tiempo Total Lote:</span> <b>{(tiempo * cantidad):,.1f} min</b></div>
                 <hr style='margin: 8px 0;'>
-                <div class='tech-row'><span>Subtotal Máquina (1 pz):</span> <b style='color:#5C3A21;'>${costo_maq_unitario:,.2f} MXN</b></div>
+                <div class='tech-row'><span>Subtotal Máquina (1 pz):</span> <b style='color:#2E7D32;'>${costo_maq_unitario:,.2f} MXN</b></div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -362,7 +362,7 @@ with tab_cotizador:
                 <div class='tech-row'><span>Costo Total Lote:</span> <b>${costo_total_lote:,.2f} MXN</b></div>
                 <div class='tech-row'><span>Descuento Aplicado:</span> <b>{int(descuento_pct * 100)}%</b></div>
                 <hr style='margin: 8px 0;'>
-                <div class='tech-row'><span>Ganancia Neta Estimada:</span> <b style='color:#5C3A21;'>${utilidad_total_lote:,.2f} MXN</b></div>
+                <div class='tech-row'><span>Ganancia Neta Estimada:</span> <b style='color:#1565C0;'>${utilidad_total_lote:,.2f} MXN</b></div>
             </div>
             """, unsafe_allow_html=True)
 
