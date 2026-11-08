@@ -62,15 +62,22 @@ def cargar_historial():
     if res.data:
         df = pd.DataFrame(res.data)
         
-        # Manejo de fechas (Captura vs Cotización real)
+        # Manejo seguro de fechas (Captura vs Cotización real)
         df["fecha_captura"] = pd.to_datetime(df["fecha"]).dt.strftime("%Y-%m-%d %H:%M")
         
-        if "fecha_cotizacion" in df.columns and df["fecha_cotizacion"].notnull().all():
-            df["dt_cotizacion"] = pd.to_datetime(df["fecha_cotizacion"])
-            df["Fecha Cotización"] = df["dt_cotizacion"].dt.strftime("%Y-%m-%d")
+        # Si la columna fecha_cotizacion no existe o tiene nulos, usamos la fecha principal
+        if "fecha_cotizacion" in df.columns:
+            # Rellenar nulos con la fecha principal
+            df["fecha_cotizacion"] = df["fecha_cotizacion"].fillna(df["fecha"])
         else:
-            df["dt_cotizacion"] = pd.to_datetime(df["fecha"])
-            df["Fecha Cotización"] = df["dt_cotizacion"].dt.strftime("%Y-%m-%d")
+            df["fecha_cotizacion"] = df["fecha"]
+            
+        # Conversión robusta manejando errores o vacíos
+        df["dt_cotizacion"] = pd.to_datetime(df["fecha_cotizacion"], errors="coerce")
+        # Si alguna fecha falló en la conversión, le asignamos la fecha de captura/registro original
+        df["dt_cotizacion"] = df["dt_cotizacion"].fillna(pd.to_datetime(df["fecha"]))
+        
+        df["Fecha Cotización"] = df["dt_cotizacion"].dt.strftime("%Y-%m-%d")
             
         cat_dict = cargar_catalogo()
         df["foto_url"] = df["producto"].map(lambda p: cat_dict.get(p, {}).get("foto"))
