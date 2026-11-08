@@ -279,30 +279,39 @@ with tab_cotizador:
     st.markdown("<p style='font-size: 18px; color: #888;'>Cotizador Interactivo - Corte & Grabado Láser CNC</p>", unsafe_allow_html=True)
     st.markdown("---")
 
-    # Formulario para evitar recargas al escribir texto o medidas
-    with st.form("form_cotizador_principal"):
-        col_cat, col_inputs = st.columns([1, 1.2])
+    col_cat, col_inputs = st.columns([1, 1.2])
 
-        with col_cat:
-            st.subheader("🖼️ Producto & Datos Cliente")
+    with col_cat:
+        st.subheader("🖼️ Producto & Datos Cliente")
+        
+        # Selección de producto e imagen (reactivos fuera del formulario para cambiar al instante)
+        lista_productos = list(CATALOGO.keys())
+        if "Personalizado (Medida Libre)" in lista_productos:
+            lista_productos.remove("Personalizado (Medida Libre)")
+            lista_productos.insert(0, "Personalizado (Medida Libre)")
+
+        producto_sel = st.selectbox("Elige un producto del catálogo:", lista_productos, key="sel_producto_main")        
+        datos_prod = CATALOGO[producto_sel]
+        
+        if datos_prod.get("foto"):
+            st.image(datos_prod["foto"], caption=producto_sel, use_container_width=True)
+        else:
+            st.info("💡 Producto personalizado sin foto asignada.")
+
+        # Opción reactiva de fecha desfasada (aparece/desaparece inmediatamente)
+        usar_fecha_manual = st.checkbox("📅 Registrar con fecha de cotización pasada (desfasada)", key="check_fecha_desfasada")
+        fecha_cotizacion_manual = datetime.date.today()
+        if usar_fecha_manual:
+            fecha_cotizacion_manual = st.date_input("Selecciona la fecha real del trato:", value=datetime.date.today(), key="input_fecha_manual")
+
+    with col_inputs:
+        st.subheader("📏 Datos del Cliente y Medidas")
+        
+        # Formulario para que escribir textos/medidas NO recargue la interfaz
+        with st.form("form_cotizador_inputs"):
             nombre_cliente = st.text_input("Nombre del Cliente:", placeholder="Ej. Juan Pérez")
             telefono_cliente = st.text_input("Teléfono WhatsApp (opcional):", placeholder="Ej. 4421234567")
             
-            lista_productos = list(CATALOGO.keys())
-            if "Personalizado (Medida Libre)" in lista_productos:
-                lista_productos.remove("Personalizado (Medida Libre)")
-                lista_productos.insert(0, "Personalizado (Medida Libre)")
-
-            producto_sel = st.selectbox("Elige un producto del catálogo:", lista_productos)        
-            datos_prod = CATALOGO[producto_sel]
-            
-            if datos_prod.get("foto"):
-                st.image(datos_prod["foto"], caption=producto_sel, use_container_width=True)
-            else:
-                st.info("💡 Producto personalizado sin foto asignada.")
-
-        with col_inputs:
-            st.subheader("📏 Dimensiones y Tiempos")
             mat_keys = list(precios_materiales.keys())
             mat_index = mat_keys.index(datos_prod["material"]) if datos_prod["material"] in mat_keys else 0
             material = st.selectbox("Material:", mat_keys, index=mat_index)
@@ -315,9 +324,9 @@ with tab_cotizador:
             tiempo = col_t.number_input("Tiempo Láser por Pieza (min):", value=float(datos_prod["tiempo"]), min_value=0.1, step=0.5)
             cantidad = col_c.number_input("Cantidad Pedida (piezas):", value=1, min_value=1, step=1)
 
-        btn_calcular = st.form_submit_button("🔄 Actualizar / Calcular Cotización", type="secondary", use_container_width=True)
+            btn_calcular = st.form_submit_button("🔄 Actualizar / Calcular Cotización", type="primary", use_container_width=True)
 
-    # Cálculos basados en los valores seleccionados
+    # Cálculos matemáticos
     area_bruta = largo * ancho
     area_con_merma = area_bruta * desperdicio_factor
     costo_cm2 = precios_materiales.get(material, 0.0)
@@ -336,6 +345,7 @@ with tab_cotizador:
 
     st.markdown("---")
     
+    # Tarjetas de resumen
     res_col1, res_col2, res_col3, res_col4 = st.columns(4)
     res_col1.metric("Costo Producción (1 pz)", f"${costo_prod_unitario:,.2f} MXN")
     res_col2.metric("Precio Base (1 pz)", f"${precio_unitario_base:,.2f} MXN")
@@ -383,24 +393,10 @@ with tab_cotizador:
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # ----------------------------------------------------
-    # SECCIÓN FUERA DEL FORMULARIO PARA LA FECHA DESFASADA Y BOTONES
-    # ----------------------------------------------------
-    st.markdown("### ⚙️ Opciones de Registro y Envío")
-    
-    f_op1, f_op2 = st.columns([1, 1])
-    with f_op1:
-        usar_fecha_manual = st.checkbox("📅 Registrar con fecha de cotización pasada (desfasada)")
-        fecha_cotizacion_manual = datetime.date.today()
-        if usar_fecha_manual:
-            fecha_cotizacion_manual = st.date_input("Selecciona la fecha real del trato:", value=datetime.date.today())
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
+    # Botones de Acción (WhatsApp, PDF e Historial)
     col_act1, col_act2, col_act3 = st.columns(3)
     with col_act1:
         cliente_txt = nombre_cliente.strip() if nombre_cliente.strip() else "Cliente"
-        
         desc_msg = f"🎉 *¡Incluye {int(descuento_pct * 100)}% de descuento por mayoreo!*\n" if descuento_pct > 0 else ""
         foto_msg = f"🖼️ *Vista previa:* {datos_prod['foto']}\n" if datos_prod.get("foto") else ""
 
@@ -458,7 +454,6 @@ with tab_cotizador:
             st.cache_data.clear()
             st.toast("¡Cotización guardada exitosamente!", icon="✅")
             st.success("✅ Cotización registrada.")
-
 # ------------------------------------------
 # TAB 2: HISTORIAL DE COTIZACIONES CON FILTROS Y EDICIÓN CONTROLADA
 # ------------------------------------------
