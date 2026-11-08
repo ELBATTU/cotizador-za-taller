@@ -3,17 +3,11 @@ import pandas as pd
 import datetime
 import urllib.parse
 import time
-import io
-import os
-from PIL import Image as PILImage
+from PIL import Image
 from supabase import create_client, Client
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib import colors
 
 # Desactivar límite de píxeles para imágenes grandes
-PILImage.MAX_IMAGE_PIXELS = None
+Image.MAX_IMAGE_PIXELS = None
 
 # ==========================================
 # CONFIGURACIÓN DE PÁGINA
@@ -36,7 +30,7 @@ def init_supabase() -> Client:
 supabase = init_supabase()
 
 # ==========================================
-# FUNCIONES DE BASE DE DATOS OPTIMIZADAS
+# FUNCIONES DE BASE DE DATOS OPTIMIZADAS CON CACHÉ
 # ==========================================
 @st.cache_data(ttl=600)
 def cargar_materiales():
@@ -61,141 +55,21 @@ def cargar_historial():
     res = supabase.table("historial_cotizaciones").select("*").order("fecha", desc=True).execute()
     if res.data:
         df = pd.DataFrame(res.data)
-        
-        # 1. Fecha de captura (cuándo se guardó en el sistema)
-        dt_cap = pd.to_datetime(df["fecha"], errors='coerce', utc=True)
-        df["fecha_captura"] = dt_cap.dt.tz_convert("America/Mexico_City").dt.strftime("%Y-%m-%d %H:%M").fillna("-")
-        
-        # 2. Fecha de cotización (la fecha real del trato / desfasada)
-        if "fecha_cotizacion" in df.columns:
-            # Convertimos la columna exacta fecha_cotizacion de Supabase
-            dt_cot = pd.to_datetime(df["fecha_cotizacion"], errors='coerce', utc=True)
-            df["dt_cotizacion"] = dt_cot.dt.tz_convert("America/Mexico_City")
-            df["Fecha Cotización"] = df["dt_cotizacion"].dt.strftime("%Y-%m-%d").fillna("-")
-        else:
-            df["dt_cotizacion"] = dt_cap.dt.tz_convert("America/Mexico_City")
-            df["Fecha Cotización"] = df["dt_cotizacion"].dt.strftime("%Y-%m-%d").fillna("-")
-            
-        cat_dict = cargar_catalogo()
-        df["foto_url"] = df["producto"].map(lambda p: cat_dict.get(p, {}).get("foto"))
-        
+        df["fecha"] = pd.to_datetime(df["fecha"]).dt.strftime("%Y-%m-%d %H:%M")
         df.rename(columns={
-            "fecha_captura": "Fecha Captura", "cliente": "Cliente", "telefono": "Teléfono",
+            "fecha": "Fecha", "cliente": "Cliente", "telefono": "Teléfono",
             "producto": "Producto", "material": "Material", "cantidad": "Cantidad",
-            "precio_unitario": "Precio Unitario", "total_cobrado": "Total Cobrado",
-            "foto_url": "Foto"
+            "precio_unitario": "Precio Unitario", "total_cobrado": "Total Cobrado"
         }, inplace=True)
-        
-        return df[["id", "Foto", "Fecha Cotización", "Fecha Captura", "Cliente", "Teléfono", "Producto", "Material", "Cantidad", "Precio Unitario", "Total Cobrado", "dt_cotizacion"]]
+        return df[["id", "Fecha", "Cliente", "Teléfono", "Producto", "Material", "Cantidad", "Precio Unitario", "Total Cobrado"]]
     return pd.DataFrame()
+
 # Carga inicial
 precios_materiales = cargar_materiales()
 CATALOGO = cargar_catalogo()
 
 # ==========================================
-# GENERADOR DE PDF PROFESIONAL CON LOGOTIPO
-# ==========================================
-def generar_pdf_cotizacion(datos_pdf):
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
-    elements = []
-    styles = getSampleStyleSheet()
-
-    COLOR_PRINCIPAL = colors.HexColor('#5C3A21')  
-    COLOR_SECUNDARIO = colors.HexColor('#8C5830') 
-    COLOR_FONDO = colors.HexColor('#F4EAD5')      
-    COLOR_TEXTO = colors.HexColor('#2B1A0E')      
-
-    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=16, textColor=COLOR_PRINCIPAL)
-    subtitle_style = ParagraphStyle('SubTitleStyle', parent=styles['Normal'], fontName='Helvetica', fontSize=9, textColor=COLOR_SECUNDARIO)
-    body_style = ParagraphStyle('BodyStyle', parent=styles['Normal'], fontName='Helvetica', fontSize=10, textColor=COLOR_TEXTO)
-    bold_style = ParagraphStyle('BoldStyle', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=10, textColor=COLOR_TEXTO)
-
-    logo_widget = None
-    for filename in ["logo.png", "logo.jpg", "logo.jpeg"]:
-        if os.path.exists(filename):
-            try:
-                with PILImage.open(filename) as im:
-                    orig_w, orig_h = im.size
-                target_w = 75  
-                target_h = target_w * (orig_h / orig_w)  
-                logo_widget = RLImage(filename, width=target_w, height=target_h)
-                logo_widget.hAlign = 'LEFT'
-            except Exception:
-                pass
-            break
-
-    if logo_widget:
-        header_col1 = [logo_widget, Spacer(1, 4), Paragraph("<b>Z&A TALLER CREATIVO</b><br/>Corte & Grabado Láser CNC<br/>MDF & CNC | Taller Creativo", subtitle_style)]
-    else:
-        header_col1 = [Paragraph("<b>Z&A TALLER CREATIVO</b><br/>Corte & Grabado Láser CNC", title_style)]
-
-    header_data = [
-        [
-            header_col1,
-            Paragraph(f"<b>COTIZACIÓN DE VENTA</b><br/><b>Fecha:</b> {datetime.datetime.now().strftime('%d/%m/%Y')}<br/><b>Vigencia:</b> 15 días", subtitle_style)
-        ]
-    ]
-    
-    header_table = Table(header_data, colWidths=[330, 210])
-    header_table.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'TOP')]))
-    elements.append(header_table)
-    elements.append(Spacer(1, 15))
-
-    cliente_info = [
-        [Paragraph(f"<b>Cliente:</b> {datos_pdf['cliente']}", body_style), Paragraph(f"<b>Teléfono:</b> {datos_pdf['telefono']}", body_style)]
-    ]
-    info_table = Table(cliente_info, colWidths=[300, 240])
-    info_table.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,-1), COLOR_FONDO),
-        ('PADDING', (0,0), (-1,-1), 8),
-        ('BOX', (0,0), (-1,-1), 0.5, COLOR_SECUNDARIO)
-    ]))
-    elements.append(info_table)
-    elements.append(Spacer(1, 15))
-
-    table_data = [
-        ["Producto", "Material", "Dimensiones", "Cantidad", "Precio Unitario", "Total"],
-        [
-            datos_pdf['producto'],
-            datos_pdf['material'],
-            f"{datos_pdf['largo']:.1f} x {datos_pdf['ancho']:.1f} cm",
-            str(datos_pdf['cantidad']),
-            f"${datos_pdf['precio_unitario']:,.2f} MXN",
-            f"${datos_pdf['total']:,.2f} MXN"
-        ]
-    ]
-
-    prod_table = Table(table_data, colWidths=[140, 100, 100, 50, 80, 70])
-    prod_table.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), COLOR_PRINCIPAL),
-        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0,0), (-1,0), 9),
-        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('GRID', (0,0), (-1,-1), 0.5, COLOR_SECUNDARIO),
-        ('PADDING', (0,0), (-1,-1), 8),
-    ]))
-    elements.append(prod_table)
-    elements.append(Spacer(1, 20))
-
-    total_data = [
-        ["", Paragraph(f"<b>TOTAL A PAGAR:</b> <font color='#5C3A21' size='12'><b>${datos_pdf['total']:,.2f} MXN</b></font>", bold_style)]
-    ]
-    total_table = Table(total_data, colWidths=[300, 240])
-    total_table.setStyle(TableStyle([('ALIGN', (1,0), (1,0), 'RIGHT')]))
-    elements.append(total_table)
-    elements.append(Spacer(1, 30))
-
-    elements.append(Paragraph("<i>¡Gracias por su preferencia! Quedamos a sus órdenes para cualquier ajuste en su proyecto.</i>", subtitle_style))
-
-    doc.build(elements)
-    buffer.seek(0)
-    return buffer
-
-# ==========================================
-# ESTILOS VISUALES CSS (INTERFAZ WEB)
+# ESTILOS VISUALES CSS
 # ==========================================
 st.markdown("""
     <style>
@@ -215,8 +89,17 @@ st.markdown("""
         margin-bottom: 12px;
         color: #212529;
     }
-    .card-tech h4 { margin: 0 0 10px 0; color: #1E88E5; font-size: 16px; }
-    .tech-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 14px; }
+    .card-tech h4 {
+        margin: 0 0 10px 0;
+        color: #1E88E5;
+        font-size: 16px;
+    }
+    .tech-row {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 6px;
+        font-size: 14px;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -287,12 +170,6 @@ with tab_cotizador:
         nombre_cliente = st.text_input("Nombre del Cliente:", placeholder="Ej. Juan Pérez")
         telefono_cliente = st.text_input("Teléfono WhatsApp (opcional):", placeholder="Ej. 4421234567")
         
-        # Opción para registrar con fecha desfasada (Fecha de Cotización)
-        usar_fecha_manual = st.checkbox("📅 Registrar con fecha de cotización pasada (desfasada)")
-        fecha_cotizacion_manual = datetime.date.today()
-        if usar_fecha_manual:
-            fecha_cotizacion_manual = st.date_input("Selecciona la fecha real del trato:", value=datetime.date.today())
-
         lista_productos = list(CATALOGO.keys())
         if "Personalizado (Medida Libre)" in lista_productos:
             lista_productos.remove("Personalizado (Medida Libre)")
@@ -339,23 +216,25 @@ with tab_cotizador:
     st.markdown("---")
     
     res_col1, res_col2, res_col3, res_col4 = st.columns(4)
-    res_col1.metric("Costo Producción (1 pz)", f"${costo_prod_unitario:,.2f} MXN")
-    res_col2.metric("Precio Base (1 pz)", f"${precio_unitario_base:,.2f} MXN")
+    res_col1.metric("Costo Producción (1 pz)", f"${costo_prod_unitario:.2f} MXN")
+    res_col2.metric("Precio Base (1 pz)", f"${precio_unitario_base:.2f} MXN")
     res_col3.metric("Descuento Mayoreo", f"{int(descuento_pct * 100)}%")
-    res_col4.metric("PRECIO TOTAL", f"${precio_total_neto:,.2f} MXN", delta=f"{cantidad} pieza(s)")
+    res_col4.metric("PRECIO TOTAL", f"${precio_total_neto:.2f} MXN", delta=f"{cantidad} pieza(s)")
 
     with st.expander("🔍 **Ver Desglose Técnico & Estructura de Costos Interfaz**", expanded=False):
         st.markdown("### 📊 Análisis Detallado de Cotización")
+        
         d_col1, d_col2, d_col3 = st.columns(3)
+        
         with d_col1:
             st.markdown(f"""
             <div class='card-tech'>
                 <h4>🪵 Materia Prima</h4>
-                <div class='tech-row'><span>Área Real:</span> <b>{area_bruta:,.1f} cm²</b></div>
-                <div class='tech-row'><span>Área (+10% Merma):</span> <b>{area_con_merma:,.1f} cm²</b></div>
-                <div class='tech-row'><span>Costo cm²:</span> <b>${costo_cm2:,.4f} MXN</b></div>
+                <div class='tech-row'><span>Área Real:</span> <b>{area_bruta:.1f} cm²</b></div>
+                <div class='tech-row'><span>Área (+10% Merma):</span> <b>{area_con_merma:.1f} cm²</b></div>
+                <div class='tech-row'><span>Costo cm²:</span> <b>${costo_cm2:.4f} MXN</b></div>
                 <hr style='margin: 8px 0;'>
-                <div class='tech-row'><span>Subtotal Material (1 pz):</span> <b style='color:#2E7D32;'>${costo_mat_unitario:,.2f} MXN</b></div>
+                <div class='tech-row'><span>Subtotal Material (1 pz):</span> <b style='color:#2E7D32;'>${costo_mat_unitario:.2f} MXN</b></div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -363,11 +242,11 @@ with tab_cotizador:
             st.markdown(f"""
             <div class='card-tech'>
                 <h4>⚡ Operación & Maquinado CNC</h4>
-                <div class='tech-row'><span>Tiempo Estimado:</span> <b>{tiempo:,.1f} min</b></div>
-                <div class='tech-row'><span>Tarifa Láser:</span> <b>${tarifa_minuto:,.2f} / min</b></div>
-                <div class='tech-row'><span>Tiempo Total Lote:</span> <b>{(tiempo * cantidad):,.1f} min</b></div>
+                <div class='tech-row'><span>Tiempo Estimado:</span> <b>{tiempo:.1f} min</b></div>
+                <div class='tech-row'><span>Tarifa Láser:</span> <b>${tarifa_minuto:.2f} / min</b></div>
+                <div class='tech-row'><span>Tiempo Total Lote:</span> <b>{(tiempo * cantidad):.1f} min</b></div>
                 <hr style='margin: 8px 0;'>
-                <div class='tech-row'><span>Subtotal Máquina (1 pz):</span> <b style='color:#2E7D32;'>${costo_maq_unitario:,.2f} MXN</b></div>
+                <div class='tech-row'><span>Subtotal Máquina (1 pz):</span> <b style='color:#2E7D32;'>${costo_maq_unitario:.2f} MXN</b></div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -376,71 +255,35 @@ with tab_cotizador:
             <div class='card-tech'>
                 <h4>📈 Márgenes y Rendimiento Lote</h4>
                 <div class='tech-row'><span>Margen Utilidad:</span> <b>{int(utilidad_porcentaje * 100)}%</b></div>
-                <div class='tech-row'><span>Costo Total Lote:</span> <b>${costo_total_lote:,.2f} MXN</b></div>
+                <div class='tech-row'><span>Costo Total Lote:</span> <b>${costo_total_lote:.2f} MXN</b></div>
                 <div class='tech-row'><span>Descuento Aplicado:</span> <b>{int(descuento_pct * 100)}%</b></div>
                 <hr style='margin: 8px 0;'>
-                <div class='tech-row'><span>Ganancia Neta Estimada:</span> <b style='color:#1565C0;'>${utilidad_total_lote:,.2f} MXN</b></div>
+                <div class='tech-row'><span>Ganancia Neta Estimada:</span> <b style='color:#1565C0;'>${utilidad_total_lote:.2f} MXN</b></div>
             </div>
             """, unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    col_act1, col_act2, col_act3 = st.columns(3)
+    col_act1, col_act2 = st.columns(2)
     with col_act1:
         cliente_txt = nombre_cliente.strip() if nombre_cliente.strip() else "Cliente"
-        
-        desc_msg = f"🎉 *¡Incluye {int(descuento_pct * 100)}% de descuento por mayoreo!*\n" if descuento_pct > 0 else ""
-        foto_msg = f"🖼️ *Vista previa:* {datos_prod['foto']}\n" if datos_prod.get("foto") else ""
-
         msg_wa = (
             f"Hola *{cliente_txt}* 👋\n\n"
             f"Te comparto la cotización de tu pedido de *Z&A Taller Creativo*:\n"
             f"📌 *Producto:* {producto_sel}\n"
-            f"{foto_msg}"
-            f"📐 *Medidas:* {largo:,.1f} x {ancho:,.1f} cm\n"
+            f"📐 *Medidas:* {largo:.1f} x {ancho:.1f} cm\n"
             f"🪵 *Material:* {material}\n"
             f"📦 *Cantidad:* {cantidad} pieza(s)\n"
-            f"{desc_msg}"
-            f"💵 *Precio Unitario:* ${precio_unitario_final:,.2f} MXN\n"
-            f"💰 *TOTAL A COBRAR:* *${precio_total_neto:,.2f} MXN*\n\n"
+            f"💵 *Precio Unitario:* ${precio_unitario_final:.2f} MXN\n"
+            f"💰 *TOTAL A COBRAR:* *${precio_total_neto:.2f} MXN*\n\n"
             f"_Cotización válida por 15 días. ¡Quedo atento a tus comentarios!_"
         )
         tel_clean = "".join(filter(str.isdigit, telefono_cliente))
         wa_url = f"https://wa.me/{tel_clean}?text={urllib.parse.quote(msg_wa)}" if tel_clean else f"https://wa.me/?text={urllib.parse.quote(msg_wa)}"
-        st.link_button("📲 Enviar por WhatsApp", wa_url, type="primary", use_container_width=True)
+        st.link_button("📲 Enviar Cotización por WhatsApp", wa_url, type="primary", use_container_width=True)
 
     with col_act2:
-        pdf_bytes = generar_pdf_cotizacion({
-            "cliente": cliente_txt,
-            "telefono": telefono_cliente.strip() if telefono_cliente.strip() else "N/A",
-            "producto": producto_sel,
-            "material": material,
-            "largo": largo,
-            "ancho": ancho,
-            "cantidad": cantidad,
-            "precio_unitario": precio_unitario_final,
-            "total": precio_total_neto
-        })
-        st.download_button(
-            label="📄 Descargar PDF Formal",
-            data=pdf_bytes,
-            file_name=f"Cotizacion_{cliente_txt.replace(' ', '_')}.pdf",
-            mime="application/pdf",
-            use_container_width=True
-        )
-
-with col_act3:
-        if st.button("💾 Guardar en Historial", use_container_width=True, key="btn_save_cot"):
-            from zoneinfo import ZoneInfo
-            tz_mexico = ZoneInfo("America/Mexico_City")
-            ahora_mexico = datetime.datetime.now(tz_mexico)
-
-            # Si es fecha manual usa medianoche local, si es ahora usa el timestamp exacto de México con su offset
-            if usar_fecha_manual:
-                f_cot_val = datetime.datetime.combine(fecha_cotizacion_manual, datetime.datetime.min.time(), tzinfo=tz_mexico).isoformat()
-            else:
-                f_cot_val = ahora_mexico.isoformat()
-            
+        if st.button("💾 Guardar Cotización en Historial", use_container_width=True, key="btn_save_cot"):
             data_cot = {
                 "cliente": nombre_cliente.strip() if nombre_cliente.strip() else "General",
                 "telefono": telefono_cliente.strip(),
@@ -448,91 +291,34 @@ with col_act3:
                 "material": material,
                 "cantidad": cantidad,
                 "precio_unitario": round(precio_unitario_final, 2),
-                "total_cobrado": round(precio_total_neto, 2),
-                "fecha_cotizacion": f_cot_val
+                "total_cobrado": round(precio_total_neto, 2)
             }
             supabase.table("historial_cotizaciones").insert(data_cot).execute()
-            st.cache_data.clear()
             st.toast("¡Cotización guardada exitosamente!", icon="✅")
-            st.success("✅ Cotización registrada.")
+            st.success("✅ ¡Cotización guardada en Supabase!")
 
 # ------------------------------------------
-# TAB 2: HISTORIAL DE COTIZACIONES CON FILTROS, DESCARGA Y EDICIÓN CONTROLADA
+# TAB 2: HISTORIAL DE COTIZACIONES
 # ------------------------------------------
 with tab_historial:
-    st.header("📋 Historial de Cotizaciones Registradas")
-    df_hist = cargar_historial()
+    st.header("📋 Historial de Cotizaciones Guardadas")
+    df_historial = cargar_historial()
     
-    if not df_hist.empty:
-        # CONTROLES DE FILTRADO POR FECHA
-        st.markdown("### 🔍 Filtrar Métricas y Registros")
-        f_col1, f_col2 = st.columns([2, 3])
-        
-        with f_col1:
-            filtro_tipo = st.selectbox("Filtrar por período:", ["Histórico Completo", "Por Mes", "Por Año", "Rango Personalizado"])
-            
-        df_filtrado = df_hist.copy()
-        
-        if filtro_tipo == "Por Mes":
-            meses_disp = sorted(df_hist["dt_cotizacion"].dt.to_period("M").astype(str).unique(), reverse=True)
-            mes_sel = st.selectbox("Selecciona el mes:", meses_disp)
-            df_filtrado = df_hist[df_hist["dt_cotizacion"].dt.to_period("M").astype(str) == mes_sel]
-            
-        elif filtro_tipo == "Por Año":
-            anos_disp = sorted(df_hist["dt_cotizacion"].dt.year.unique(), reverse=True)
-            ano_sel = st.selectbox("Selecciona el año:", anos_disp)
-            df_filtrado = df_hist[df_hist["dt_cotizacion"].dt.year == ano_sel]
-            
-        elif filtro_tipo == "Rango Personalizado":
-            r_col1, r_col2 = st.columns(2)
-            f_inicio = r_col1.date_input("Fecha Inicio", value=datetime.date.today().replace(day=1))
-            f_fin = r_col2.date_input("Fecha Fin", value=datetime.date.today())
-            df_filtrado = df_hist[(df_hist["dt_cotizacion"].dt.date >= f_inicio) & (df_hist["dt_cotizacion"].dt.date <= f_fin)]
-
-        st.markdown("---")
-
-        # MÉTRICAS DINÁMICAS SEGÚN FILTRO
+    if not df_historial.empty:
         h_col1, h_col2, h_col3 = st.columns(3)
-        h_col1.metric("Cotizaciones en el Periodo", len(df_filtrado))
-        h_col2.metric("Monto Total Cotizado", f"${df_filtrado['Total Cobrado'].sum():,.2f} MXN")
-        promedio_venta = df_filtrado['Total Cobrado'].mean() if len(df_filtrado) > 0 else 0.0
-        h_col3.metric("Promedio por Venta", f"${promedio_venta:,.2f} MXN")
-
-        # BOTÓN PARA DESCARGAR REPORTE EN CSV RESPETANDO EL FILTRO
-        df_exportar = df_filtrado[["Fecha Cotización", "Fecha Captura", "Cliente", "Teléfono", "Producto", "Material", "Cantidad", "Precio Unitario", "Total Cobrado"]].copy()
-        csv_bytes = df_exportar.to_csv(index=False).encode('utf-8-sig')
-
-        st.download_button(
-            label=f"📥 Descargar Reporte Filtrado ({len(df_filtrado)} registros)",
-            data=csv_bytes,
-            file_name=f"Reporte_Cotizaciones_{filtro_tipo.replace(' ', '_')}.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
-        
+        h_col1.metric("Total Cotizaciones", len(df_historial))
+        h_col2.metric("Monto Total Cotizado", f"${df_historial['Total Cobrado'].sum():,.2f} MXN")
+        h_col3.metric("Promedio por Venta", f"${df_historial['Total Cobrado'].mean():,.2f} MXN")
         st.markdown("---")
-        st.markdown("### ✏️ Edición Controlada (Cliente, Teléfono y Fecha de Trato)")
-        st.info("💡 Puedes modificar directamente en la tabla el **Nombre del Cliente**, **Teléfono** o la **Fecha Cotización** (por si capturas algo desfasado). Los montos y productos se mantienen protegidos por seguridad.")
-
-        df_editable = df_filtrado[["id", "Foto", "Fecha Cotización", "Fecha Captura", "Cliente", "Teléfono", "Producto", "Material", "Cantidad", "Precio Unitario", "Total Cobrado"]].copy()
 
         df_editado = st.data_editor(
-            df_editable,
+            df_historial,
             use_container_width=True,
-            hide_index=True,
-            key="editor_historial_controlado",
+            num_rows="dynamic",
+            key="editor_historial",
             column_config={
                 "id": None,
-                "Foto": st.column_config.ImageColumn("Foto", help="Vista previa", width="small"),
-                "Fecha Cotización": st.column_config.TextColumn("Fecha Cotización (Editable)"),
-                "Fecha Captura": st.column_config.TextColumn("Fecha Captura (Sistema)", disabled=True),
-                "Cliente": st.column_config.TextColumn("Cliente (Editable)"),
-                "Teléfono": st.column_config.TextColumn("Teléfono (Editable)"),
-                "Producto": st.column_config.TextColumn("Producto", disabled=True),
-                "Material": st.column_config.TextColumn("Material", disabled=True),
-                "Cantidad": st.column_config.NumberColumn("Cantidad", format="%d", disabled=True),
-                "Precio Unitario": st.column_config.NumberColumn("Precio Unitario", format="$%.2f", disabled=True),
-                "Total Cobrado": st.column_config.NumberColumn("Total Cobrado", format="$%.2f", disabled=True)
+                "Fecha": st.column_config.TextColumn("Fecha", disabled=True)
             }
         )
 
@@ -542,11 +328,11 @@ with tab_historial:
                     supabase.table("historial_cotizaciones").update({
                         "cliente": row["Cliente"],
                         "telefono": row["Teléfono"],
-                        "fecha_cotizacion": str(row["Fecha Cotización"])
-                    }).eq("id", int(row["id"])).execute()
-            
-            st.cache_data.clear()
-            st.toast("Historial actualizado correctamente", icon="📝")
+                        "cantidad": int(row["Cantidad"]),
+                        "precio_unitario": float(row["Precio Unitario"]),
+                        "total_cobrado": float(row["Total Cobrado"])
+                    }).eq("id", row["id"]).execute()
+            st.toast("Historial de cotizaciones actualizado correctamente", icon="📝")
             st.success("✅ Historial actualizado.")
             time.sleep(1)
             st.rerun()
@@ -554,7 +340,7 @@ with tab_historial:
         st.info("💡 Aún no hay cotizaciones guardadas.")
 
 # ------------------------------------------
-# TAB 3: PANEL DE ADMINISTRACIÓN
+# TAB 3: PANEL DE ADMINISTRACIÓN RESTRUCTURADO
 # ------------------------------------------
 with tab_admin:
     st.header("⚙️ Panel de Gestión del Taller")
@@ -564,12 +350,17 @@ with tab_admin:
         "🪵 Gestión de Materiales e Insumos"
     ])
     
-    # PRODUCTOS
+    # ==========================================
+    # SUB-PESTAÑA 1: PRODUCTOS
+    # ==========================================
     with main_admin_tab1:
         prod_add_tab, prod_edit_tab, prod_del_tab = st.tabs([
-            "➕ Agregar Producto", "✏️ Modificar Producto", "🗑️ Eliminar Producto"
+            "➕ Agregar Producto", 
+            "✏️ Modificar Producto", 
+            "🗑️ Eliminar Producto"
         ])
         
+        # 1.1 AGREGAR PRODUCTO
         with prod_add_tab:
             st.markdown("### ➕ Registrar Nuevo Producto en Catálogo")
             with st.form("form_add_prod"):
@@ -595,11 +386,15 @@ with tab_admin:
                             
                             try:
                                 supabase.storage.from_("productos_img").upload(
-                                    path=file_path, file=file_bytes, file_options={"content-type": foto_up.type}
+                                    path=file_path,
+                                    file=file_bytes,
+                                    file_options={"content-type": foto_up.type}
                                 )
                             except Exception:
                                 supabase.storage.from_("productos_img").update(
-                                    path=file_path, file=file_bytes, file_options={"content-type": foto_up.type}
+                                    path=file_path,
+                                    file=file_bytes,
+                                    file_options={"content-type": foto_up.type}
                                 )
                                 
                             foto_url = supabase.storage.from_("productos_img").get_public_url(file_path)
@@ -609,11 +404,14 @@ with tab_admin:
                             "tiempo": t_p, "material": m_p, "foto_url": foto_url
                         }).execute()
                         st.cache_data.clear()
+                        
+                        # Alerta visual
                         st.toast(f"Producto '{n_p}' registrado con éxito", icon="📦")
                         st.success(f"✅ Producto '{n_p}' registrado correctamente.")
                         time.sleep(1.2)
                         st.rerun()
 
+        # 1.2 MODIFICAR PRODUCTO
         with prod_edit_tab:
             st.markdown("### ✏️ Editar Parámetros de Producto Existente")
             lista_prods_edit = [p for p in CATALOGO.keys() if p != "Personalizado (Medida Libre)"]
@@ -645,11 +443,15 @@ with tab_admin:
                             
                             try:
                                 supabase.storage.from_("productos_img").upload(
-                                    path=file_path, file=file_bytes, file_options={"content-type": foto_up_edit.type}
+                                    path=file_path,
+                                    file=file_bytes,
+                                    file_options={"content-type": foto_up_edit.type}
                                 )
                             except Exception:
                                 supabase.storage.from_("productos_img").update(
-                                    path=file_path, file=file_bytes, file_options={"content-type": foto_up_edit.type}
+                                    path=file_path,
+                                    file=file_bytes,
+                                    file_options={"content-type": foto_up_edit.type}
                                 )
                             foto_url_final = supabase.storage.from_("productos_img").get_public_url(file_path)
 
@@ -659,6 +461,8 @@ with tab_admin:
                         }).eq("nombre", p_edit_sel).execute()
                         
                         st.cache_data.clear()
+                        
+                        # Alerta visual
                         st.toast(f"Producto '{p_edit_sel}' actualizado correctamente", icon="✏️")
                         st.success(f"✅ Producto '{p_edit_sel}' actualizado.")
                         time.sleep(1.2)
@@ -666,6 +470,7 @@ with tab_admin:
             else:
                 st.info("💡 No hay productos en el catálogo para editar.")
 
+        # 1.3 ELIMINAR PRODUCTO
         with prod_del_tab:
             st.markdown("### 🗑️ Dar de Baja Producto")
             prods_del = [p for p in CATALOGO.keys() if p != "Personalizado (Medida Libre)"]
@@ -687,6 +492,8 @@ with tab_admin:
                             pass
                             
                     st.cache_data.clear()
+                    
+                    # Alerta visual
                     st.toast(f"Producto '{p_del}' eliminado del catálogo", icon="🗑️")
                     st.success(f"✅ Producto '{p_del}' e imagen eliminados correctamente.")
                     time.sleep(1.2)
@@ -694,12 +501,17 @@ with tab_admin:
             else:
                 st.info("💡 No hay productos en el catálogo para eliminar.")
 
-    # MATERIALES
+    # ==========================================
+    # SUB-PESTAÑA 2: MATERIALES
+    # ==========================================
     with main_admin_tab2:
         mat_add_tab, mat_edit_tab, mat_del_tab = st.tabs([
-            "➕ Agregar Material", "✏️ Modificar Material", "🗑️ Eliminar Material"
+            "➕ Agregar Material", 
+            "✏️ Modificar Material", 
+            "🗑️ Eliminar Material"
         ])
         
+        # 2.1 AGREGAR MATERIAL
         with mat_add_tab:
             st.markdown("### ➕ Registrar Nuevo Material / Placa")
             with st.form("form_add_mat"):
@@ -718,11 +530,14 @@ with tab_admin:
                         c_cm2 = p_m / (l_m * a_m)
                         supabase.table("materiales").insert({"nombre": nom_m.strip(), "costo_cm2": c_cm2}).execute()
                         st.cache_data.clear()
-                        st.toast(f"Material '{nom_m}' agregado con costo de ${c_cm2:,.4f}/cm²", icon="🪵")
-                        st.success(f"✅ Material '{nom_m}' registrado.")
+                        
+                        # Alerta visual
+                        st.toast(f"Material '{nom_m}' agregado con costo de ${c_cm2:.4f}/cm²", icon="🪵")
+                        st.success(f"✅ Material '{nom_m}' registrado con costo de ${c_cm2:.4f}/cm².")
                         time.sleep(1.2)
                         st.rerun()
 
+        # 2.2 MODIFICAR MATERIAL
         with mat_edit_tab:
             st.markdown("### ✏️ Actualizar Precios de Placa")
             mat_list = list(precios_materiales.keys())
@@ -730,7 +545,7 @@ with tab_admin:
             if mat_list:
                 mat_edit_sel = st.selectbox("Selecciona material a actualizar:", mat_list, key="sel_edit_mat")
                 c_cm2_actual = precios_materiales[mat_edit_sel]
-                st.caption(f"Costo por cm² actual: **${c_cm2_actual:,.4f} MXN**")
+                st.caption(f"Costo por cm² actual: **${c_cm2_actual:.4f} MXN**")
                 
                 with st.form("form_edit_mat"):
                     col_me1, col_me2, col_me3 = st.columns(3)
@@ -744,15 +559,18 @@ with tab_admin:
                         nuevo_c_cm2 = p_m_edit / (l_m_edit * a_m_edit)
                         supabase.table("materiales").update({"costo_cm2": nuevo_c_cm2}).eq("nombre", mat_edit_sel).execute()
                         st.cache_data.clear()
-                        st.toast(f"Material '{mat_edit_sel}' actualizado a ${nuevo_c_cm2:,.4f}/cm²", icon="✏️")
-                        st.success(f"✅ Material '{mat_edit_sel}' actualizado.")
+                        
+                        # Alerta visual
+                        st.toast(f"Material '{mat_edit_sel}' actualizado a ${nuevo_c_cm2:.4f}/cm²", icon="✏️")
+                        st.success(f"✅ Material '{mat_edit_sel}' actualizado a ${nuevo_c_cm2:.4f}/cm².")
                         time.sleep(1.2)
                         st.rerun()
             else:
                 st.info("💡 No hay materiales registrados.")
 
+        # 2.3 ELIMINAR MATERIAL
         with mat_del_tab:
-            st.markdown("### 🗑️ Eliminar Material del Sistema digital")
+            st.markdown("### 🗑️ Eliminar Material del Sistema")
             mat_list_del = list(precios_materiales.keys())
             
             if mat_list_del:
@@ -762,6 +580,8 @@ with tab_admin:
                 if st.button("❌ Confirmar y Eliminar Material", type="primary", key="btn_del_mat_confirm"):
                     supabase.table("materiales").delete().eq("nombre", mat_del).execute()
                     st.cache_data.clear()
+                    
+                    # Alerta visual
                     st.toast(f"Material '{mat_del}' eliminado del sistema", icon="🗑️")
                     st.success(f"✅ Material '{mat_del}' eliminado.")
                     time.sleep(1.2)
