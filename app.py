@@ -580,20 +580,37 @@ with tab_historial:
             btn_guardar = False
 
         if btn_guardar:
-            for _, row in df_editado.iterrows():
-                if pd.notnull(row["id"]):
-                    f_val = str(row["Fecha Cotización"]) if pd.notnull(row["Fecha Cotización"]) else datetime.date.today().isoformat()
-                    supabase.table("historial_cotizaciones").update({
-                        "cliente": row["Cliente"],
-                        "telefono": row["Teléfono"],
-                        "fecha_cotizacion": f_val
-                    }).eq("id", int(row["id"])).execute()
+            error_fecha_futura = False
+            hoy = datetime.date.today()
             
-            st.cache_data.clear()
-            st.toast("Historial actualizado correctamente", icon="📝")
-            st.success("✅ Historial actualizado.")
-            time.sleep(1)
-            st.rerun()
+            # Validar que ninguna fecha editada sea del futuro
+            for _, row in df_editado.iterrows():
+                if pd.notnull(row["Fecha Cotización"]):
+                    # Convertir a objeto date si viene como string
+                    f_cot = row["Fecha Cotización"]
+                    if isinstance(f_cot, str):
+                        f_cot = datetime.datetime.strptime(f_cot, "%Y-%m-%d").date()
+                        
+                    if f_cot > hoy:
+                        error_fecha_futura = True
+                        st.error(f"❌ No puedes asignar una fecha futura ({f_cot}) en la cotización del cliente '{row['Cliente']}'. La fecha máxima permitida es hoy ({hoy}).")
+                        break
+
+            if not error_fecha_futura:
+                for _, row in df_editado.iterrows():
+                    if pd.notnull(row["id"]):
+                        f_val = str(row["Fecha Cotización"]) if pd.notnull(row["Fecha Cotización"]) else datetime.date.today().isoformat()
+                        supabase.table("historial_cotizaciones").update({
+                            "cliente": row["Cliente"],
+                            "telefono": row["Teléfono"],
+                            "fecha_cotizacion": f_val
+                        }).eq("id", int(row["id"])).execute()
+                
+                st.cache_data.clear()
+                st.toast("Historial actualizado correctamente", icon="📝")
+                st.success("✅ Historial actualizado.")
+                time.sleep(1)
+                st.rerun()
     else:
         st.info("💡 Aún no hay cotizaciones guardadas.")
 
