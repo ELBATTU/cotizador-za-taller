@@ -295,6 +295,7 @@ with tab_cotizador:
             st.session_state["input_cliente"] = ""
             st.session_state["input_telefono"] = ""
             st.session_state["input_cantidad"] = 1
+            st.session_state["select_producto"] = "Personalizado (Medida Libre)"
             st.rerun()
 
     st.markdown("---")
@@ -304,11 +305,13 @@ with tab_cotizador:
     with col_cat:
         st.subheader("🖼️ Producto & Datos Cliente")
         
-        # Inicializar keys en session_state si no existen para que el botón de limpiar funcione
+        # Inicializar estados para los inputs manuales
         if "input_cliente" not in st.session_state:
             st.session_state["input_cliente"] = ""
         if "input_telefono" not in st.session_state:
             st.session_state["input_telefono"] = ""
+        if "select_producto" not in st.session_state:
+            st.session_state["select_producto"] = "Personalizado (Medida Libre)"
 
         nombre_cliente = st.text_input("Nombre del Cliente:", placeholder="Ej. Juan Pérez", key="input_cliente")
         telefono_cliente = st.text_input("Teléfono WhatsApp (opcional):", placeholder="Ej. 4421234567", key="input_telefono")
@@ -318,7 +321,13 @@ with tab_cotizador:
             lista_productos.remove("Personalizado (Medida Libre)")
             lista_productos.insert(0, "Personalizado (Medida Libre)")
 
-        producto_sel = st.selectbox("Elige un producto del catálogo:", lista_productos)        
+        # Asegurarnos de que el índice seleccionado sea válido en la lista
+        try:
+            default_idx = lista_productos.index(st.session_state["select_producto"])
+        except ValueError:
+            default_idx = 0
+
+        producto_sel = st.selectbox("Elige un producto del catálogo:", lista_productos, index=default_idx, key="select_producto")        
         datos_prod = CATALOGO[producto_sel]
         
         if datos_prod.get("foto"):
