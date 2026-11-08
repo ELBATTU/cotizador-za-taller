@@ -61,15 +61,15 @@ def cargar_historial():
     res = supabase.table("historial_cotizaciones").select("*").order("fecha", desc=True).execute()
     if res.data:
         df = pd.DataFrame(res.data)
-        # Conservar fecha original en datetime para filtros precisos
+        # Convertir a datetime real para facilitar los filtros por fecha
         df["fecha_dt"] = pd.to_datetime(df["fecha"])
-        df["Fecha"] = df["fecha_dt"].dt.strftime("%Y-%m-%d %H:%M")
+        df["fecha_str"] = df["fecha_dt"].dt.strftime("%Y-%m-%d %H:%M")
         
         cat_dict = cargar_catalogo()
         df["foto_url"] = df["producto"].map(lambda p: cat_dict.get(p, {}).get("foto"))
         
         df.rename(columns={
-            "cliente": "Cliente", "telefono": "Teléfono",
+            "fecha_str": "Fecha", "cliente": "Cliente", "telefono": "Teléfono",
             "producto": "Producto", "material": "Material", "cantidad": "Cantidad",
             "precio_unitario": "Precio Unitario", "total_cobrado": "Total Cobrado",
             "foto_url": "Foto"
@@ -428,89 +428,87 @@ with tab_cotizador:
             st.success("✅ Cotización registrada.")
 
 # ------------------------------------------
-# TAB 2: HISTORIAL DE COTIZACIONES CON FILTROS TEMPORALES
+# TAB 2: HISTORIAL CON FILTROS TEMPORALES PROFESIONALES
 # ------------------------------------------
 with tab_historial:
-    st.header("📋 Historial de Cotizaciones Registradas")
+    st.header("📋 Historial y Analítica de Cotizaciones")
+    st.markdown("Consulta el rendimiento de ventas y el registro histórico filtrado por periodo.")
     
     df_historial = cargar_historial()
     
     if not df_historial.empty:
-        # Filtros temporales en la parte superior
-        st.markdown("### ⏱️ Filtrar por Periodo")
-        f_col1, f_col2 = st.columns([2, 2])
-        
-        with f_col1:
-            filtro_tipo = st.selectbox(
-                "Ver métricas e historial por:", 
-                ["Todo el Historial", "Año Específico", "Mes Específico", "Semana Actual / Reciente"]
-            )
-            
-        df_filtrado = df_historial.copy()
-        
-        # Lógica de filtrado de acuerdo a la selección
-        now = datetime.datetime.now()
-        if filtro_tipo == "Año Específico":
-            anos_disponibles = sorted(df_historial["fecha_dt"].dt.year.unique(), reverse=True)
-            ano_sel = st.selectbox("Selecciona el Año:", anos_disponibles)
-            df_filtrado = df_historial[df_historial["fecha_dt"].dt.year == ano_sel]
-            
-        elif filtro_tipo == "Mes Específico":
-            col_m1, col_m2 = st.columns(2)
-            anos_disponibles = sorted(df_historial["fecha_dt"].dt.year.unique(), reverse=True)
-            ano_sel = col_m1.selectbox("Año:", anos_disponibles, key="ano_mes")
-            
-            meses_nombres = {
-                1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio",
-                7: "Julio", 8: "Agosto", 9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
-            }
-            mes_sel_nombre = col_m2.selectbox("Mes:", list(meses_nombres.values()))
-            mes_sel_num = [k for k, v in meses_nombres.items() if v == mes_sel_nombre][0]
-            
-            df_filtrado = df_historial[
-                (df_historial["fecha_dt"].dt.year == ano_sel) & 
-                (df_historial["fecha_dt"].dt.month == mes_sel_num)
-            ]
-            
-        elif filtro_tipo == "Semana Actual / Reciente":
-            # Filtro de los últimos 7 días
-            hace_7_dias = now - datetime.timedelta(days=7)
-            df_filtrado = df_historial[df_historial["fecha_dt"] >= hace_7_dias]
-
+        # Controles de filtrado temporal profesional
         st.markdown("---")
-
-        # Métricas dinámicas calculadas sobre el periodo seleccionado
-        h_col1, h_col2, h_col3 = st.columns(3)
-        total_monto = df_filtrado['Total Cobrado'].sum() if not df_filtrado.empty else 0.0
-        promedio_venta = df_filtrado['Total Cobrado'].mean() if not df_filtrado.empty else 0.0
+        f_col1, f_col2, f_col3 = st.columns([1.5, 1.5, 2])
         
-        h_col1.metric("Cotizaciones en el Periodo", len(df_filtrado))
-        h_col2.metric("Monto Total Cotizado", f"${total_monto:,.2f} MXN")
-        h_col3.metric("Promedio por Venta", f"${promedio_venta:,.2f} MXN")
-        
-        st.markdown("---")
-
-        # Tabla limpia de solo lectura con las imágenes y datos filtrados
-        df_mostrar = df_filtrado.drop(columns=["fecha_dt"])
-        st.dataframe(
-            df_mostrar,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "id": None,
-                "Foto": st.column_config.ImageColumn("Foto", help="Vista previa del producto en catálogo", width="small"),
-                "Fecha": st.column_config.TextColumn("Fecha"),
-                "Cliente": st.column_config.TextColumn("Cliente"),
-                "Teléfono": st.column_config.TextColumn("Teléfono"),
-                "Producto": st.column_config.TextColumn("Producto"),
-                "Material": st.column_config.TextColumn("Material"),
-                "Cantidad": st.column_config.NumberColumn("Cantidad", format="%d"),
-                "Precio Unitario": st.column_config.NumberColumn("Precio Unitario", format="$%.2f"),
-                "Total Cobrado": st.column_config.NumberColumn("Total Cobrado", format="$%.2f")
-            }
+        tipo_filtro = f_col1.selectbox(
+            "📅 Filtrar Período:", 
+            ["Histórico Completo", "Este Mes", "Este Año", "Personalizado"]
         )
+        
+        df_filtrado = df_historial.copy()
+        hoy = pd.Timestamp.now()
+        
+        if tipo_filtro == "Este Mes":
+            df_filtrado = df_historial[
+                (df_historial["fecha_dt"].dt.year == hoy.year) & 
+                (df_historial["fecha_dt"].dt.month == hoy.month)
+            ]
+        elif tipo_filtro == "Este Año":
+            df_filtrado = df_historial[
+                df_historial["fecha_dt"].dt.year == hoy.year
+            ]
+        elif tipo_filtro == "Personalizado":
+            rango_fechas = f_col2.date_input(
+                "Rango de fechas:",
+                value=(hoy - pd.Timedelta(days=30), hoy)
+            )
+            if len(rango_fechas) == 2:
+                f_inicio, f_fin = pd.to_datetime(rango_fechas[0]), pd.to_datetime(rango_fechas[1]) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+                df_filtrado = df_historial[
+                    (df_historial["fecha_dt"] >= f_inicio) & 
+                    (df_historial["fecha_dt"] <= f_fin)
+                ]
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # Métricas dinámicas adaptadas al filtro seleccionado
+        total_cotiz = len(df_filtrado)
+        monto_total = df_filtrado["Total Cobrado"].sum() if total_cotiz > 0 else 0.0
+        promedio_venta = df_filtrado["Total Cobrado"].mean() if total_cotiz > 0 else 0.0
+
+        m_col1, m_col2, m_col3 = st.columns(3)
+        m_col1.metric("📊 Total Cotizaciones", total_cotiz)
+        m_col2.metric("💵 Monto Total Cotizado", f"${monto_total:,.2f} MXN")
+        m_col3.metric("📈 Promedio por Venta", f"${promedio_venta:,.2f} MXN")
+        
+        st.markdown("---")
+
+        if not df_filtrado.empty:
+            # Preparar dataframe para mostrar (ocultando columnas internas de control datetime)
+            df_mostrar = df_filtrado.drop(columns=["fecha_dt"])
+            
+            st.dataframe(
+                df_mostrar,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "id": None,
+                    "Foto": st.column_config.ImageColumn("Foto", help="Vista previa del producto en catálogo", width="small"),
+                    "Fecha": st.column_config.TextColumn("Fecha"),
+                    "Cliente": st.column_config.TextColumn("Cliente"),
+                    "Teléfono": st.column_config.TextColumn("Teléfono"),
+                    "Producto": st.column_config.TextColumn("Producto"),
+                    "Material": st.column_config.TextColumn("Material"),
+                    "Cantidad": st.column_config.NumberColumn("Cantidad", format="%d"),
+                    "Precio Unitario": st.column_config.NumberColumn("Precio Unitario", format="$%.2f"),
+                    "Total Cobrado": st.column_config.NumberColumn("Total Cobrado", format="$%.2f")
+                }
+            )
+        else:
+            st.warning("⚠️ No se encontraron cotizaciones para el filtro de fecha seleccionado.")
     else:
-        st.info("💡 Aún no hay cotizaciones guardadas.")
+        st.info("💡 Aún no hay cotizaciones guardadas en el sistema.")
 
 # ------------------------------------------
 # TAB 3: PANEL DE ADMINISTRACIÓN
