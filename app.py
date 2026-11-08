@@ -37,6 +37,32 @@ def init_supabase() -> Client:
 supabase = init_supabase()
 
 # ==========================================
+# FUNCIÓN DE COMPRESIÓN DE IMÁGENES
+# ==========================================
+def optimizar_imagen(uploaded_file, max_ancho=1200, calidad=85):
+    """
+    Comprime y redimensiona la imagen para ahorrar almacenamiento en la nube
+    sin afectar la calidad visual.
+    """
+    img = PILImage.open(uploaded_file)
+    
+    # Si la imagen tiene transparencia (RGBA/P), la convertimos adecuadamente o la manejamos
+    if img.mode in ("RGBA", "P"):
+        img = img.convert("RGBA")
+    else:
+        img = img.convert("RGB")
+        
+    # Redimensionar si excede el ancho máximo manteniendo proporciones
+    if img.width > max_ancho or img.height > max_ancho:
+        img.thumbnail((max_ancho, max_ancho), PILImage.Resampling.LANCZOS)
+        
+    buffer = io.BytesIO()
+    # Guardamos en formato WebP que ofrece excelente compresión y calidad superior
+    img.save(buffer, format="WEBP", quality=calidad, optimize=True)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+# ==========================================
 # FUNCIONES DE BASE DE DATOS OPTIMIZADAS
 # ==========================================
 @st.cache_data(ttl=600)
@@ -640,27 +666,25 @@ with tab_admin:
                     if not n_p.strip():
                         st.error("❌ El nombre del producto no puede estar vacío.")
                     else:
-                        # 💡 Estandarizar nombre a MAYÚSCULAS para evitar duplicados por minúsculas
                         nombre_formateado = n_p.strip().upper()
-                        
-                        # Validar si ya existe en el catálogo actual
                         nombres_existentes = [p.upper() for p in CATALOGO.keys()]
+                        
                         if nombre_formateado in nombres_existentes:
                             st.error(f"❌ El producto '{nombre_formateado}' ya existe en el catálogo. No se permiten nombres duplicados.")
                         else:
                             foto_url = None
                             if foto_up:
-                                file_ext = foto_up.name.split(".")[-1]
-                                file_path = f"{nombre_formateado.lower().replace(' ', '_')}.{file_ext}"
-                                file_bytes = foto_up.getvalue()
+                                # 💡 COMPRESIÓN AUTOMÁTICA DE IMAGEN AQUÍ
+                                file_bytes = optimizar_imagen(foto_up)
+                                file_path = f"{nombre_formateado.lower().replace(' ', '_')}.webp"
                                 
                                 try:
                                     supabase.storage.from_("productos_img").upload(
-                                        path=file_path, file=file_bytes, file_options={"content-type": foto_up.type}
+                                        path=file_path, file=file_bytes, file_options={"content-type": "image/webp"}
                                     )
                                 except Exception:
                                     supabase.storage.from_("productos_img").update(
-                                        path=file_path, file=file_bytes, file_options={"content-type": foto_up.type}
+                                        path=file_path, file=file_bytes, file_options={"content-type": "image/webp"}
                                     )
                                     
                                 foto_url = supabase.storage.from_("productos_img").get_public_url(file_path)
@@ -700,17 +724,17 @@ with tab_admin:
                     if btn_save_edit:
                         foto_url_final = dados_edit.get("foto")
                         if foto_up_edit:
-                            file_ext = foto_up_edit.name.split(".")[-1]
-                            file_path = f"{p_edit_sel.strip().lower().replace(' ', '_')}.{file_ext}"
-                            file_bytes = foto_up_edit.getvalue()
+                            # 💡 COMPRESIÓN AUTOMÁTICA DE IMAGEN AL EDITAR
+                            file_bytes = optimizar_imagen(foto_up_edit)
+                            file_path = f"{p_edit_sel.strip().lower().replace(' ', '_')}.webp"
                             
                             try:
                                 supabase.storage.from_("productos_img").upload(
-                                    path=file_path, file=file_bytes, file_options={"content-type": foto_up_edit.type}
+                                    path=file_path, file=file_bytes, file_options={"content-type": "image/webp"}
                                 )
                             except Exception:
                                 supabase.storage.from_("productos_img").update(
-                                    path=file_path, file=file_bytes, file_options={"content-type": foto_up_edit.type}
+                                    path=file_path, file=file_bytes, file_options={"content-type": "image/webp"}
                                 )
                             foto_url_final = supabase.storage.from_("productos_img").get_public_url(file_path)
 
