@@ -63,7 +63,7 @@ def cargar_historial():
     if res.data:
         df = pd.DataFrame(res.data)
         
-        # Ajuste de hora a Zona Horaria de México (America/Mexico_City)
+        # Ajuste de hora a Zona Horaria de México para la Fecha de Captura
         dt_utc = pd.to_datetime(df["fecha"])
         if dt_utc.dt.tz is None:
             dt_mexico = dt_utc.dt.tz_localize("UTC").dt.tz_convert(ZoneInfo("America/Mexico_City"))
@@ -72,16 +72,18 @@ def cargar_historial():
             
         df["fecha_captura"] = dt_mexico.dt.strftime("%Y-%m-%d %H:%M")
         
-        # Manejo seguro de fechas de cotización
+        # Respetar estrictamente la fecha_cotizacion individual de la base de datos
         if "fecha_cotizacion" in df.columns:
+            # Si alguna celda viniera vacía en la DB, usa su fecha de captura, si no, respeta su valor exacto
             df["fecha_cotizacion"] = df["fecha_cotizacion"].fillna(df["fecha"])
         else:
             df["fecha_cotizacion"] = df["fecha"]
             
+        # Convertir a datetime y extraer la fecha individual limpiamente
         df["dt_cotizacion"] = pd.to_datetime(df["fecha_cotizacion"], errors="coerce")
         df["dt_cotizacion"] = df["dt_cotizacion"].fillna(pd.to_datetime(df["fecha"]))
         
-        # Guardar la fecha en formato de objeto date para el selector DateColumn
+        # Asignar el objeto date exacto para cada fila
         df["Fecha Cotización"] = df["dt_cotizacion"].dt.date
             
         cat_dict = cargar_catalogo()
@@ -464,7 +466,7 @@ with tab_cotizador:
 
     with col_act3:
         if st.button("💾 Guardar en Historial", use_container_width=True, key="btn_save_cot"):
-            f_ahora = datetime.datetime.now(ZoneInfo("America/Mexico_City")).isoformat()
+            f_ahora = datetime.datetime.now(ZoneInfo("America/Mexico_City")).strftime("%Y-%m-%d")
             data_cot = {
                 "cliente": nombre_cliente.strip() if nombre_cliente.strip() else "General",
                 "telefono": telefono_cliente.strip(),
