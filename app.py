@@ -430,9 +430,15 @@ with tab_cotizador:
             use_container_width=True
         )
 
-    with col_act3:
+with col_act3:
         if st.button("💾 Guardar en Historial", use_container_width=True, key="btn_save_cot"):
-            f_cot_val = datetime.datetime.combine(fecha_cotizacion_manual, datetime.datetime.min.time()).isoformat() if usar_fecha_manual else datetime.datetime.now().isoformat()
+            # Obtener la fecha y hora actual ajustada a la hora de México
+            from zoneinfo import ZoneInfo
+            tz_mexico = ZoneInfo("America/Mexico_City")
+            ahora_mexico = datetime.datetime.now(tz_mexico)
+
+            f_cot_val = datetime.datetime.combine(fecha_cotizacion_manual, datetime.datetime.min.time()).isoformat() if usar_fecha_manual else ahora_mexico.isoformat()
+            
             data_cot = {
                 "cliente": nombre_cliente.strip() if nombre_cliente.strip() else "General",
                 "telefono": telefono_cliente.strip(),
@@ -444,6 +450,7 @@ with tab_cotizador:
                 "fecha_cotizacion": f_cot_val
             }
             supabase.table("historial_cotizaciones").insert(data_cot).execute()
+            st.cache_data.clear() # Limpiamos caché para que el historial refleje el cambio al instante
             st.toast("¡Cotización guardada exitosamente!", icon="✅")
             st.success("✅ Cotización registrada.")
 
