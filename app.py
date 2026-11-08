@@ -61,8 +61,8 @@ def cargar_historial():
     res = supabase.table("historial_cotizaciones").select("*").order("fecha", desc=True).execute()
     if res.data:
         df = pd.DataFrame(res.data)
-        # Convertir a datetime real para facilitar los filtros por fecha
-        df["fecha_dt"] = pd.to_datetime(df["fecha"])
+        # Convertir a datetime y normalizar tz para evitar conflictos de comparación
+        df["fecha_dt"] = pd.to_datetime(df["fecha"]).dt.tz_localize(None)
         df["fecha_str"] = df["fecha_dt"].dt.strftime("%Y-%m-%d %H:%M")
         
         cat_dict = cargar_catalogo()
@@ -437,7 +437,6 @@ with tab_historial:
     df_historial = cargar_historial()
     
     if not df_historial.empty:
-        # Controles de filtrado temporal profesional
         st.markdown("---")
         f_col1, f_col2, f_col3 = st.columns([1.5, 1.5, 2])
         
@@ -461,10 +460,11 @@ with tab_historial:
         elif tipo_filtro == "Personalizado":
             rango_fechas = f_col2.date_input(
                 "Rango de fechas:",
-                value=(hoy - pd.Timedelta(days=30), hoy)
+                value=(hoy.date() - datetime.timedelta(days=30), hoy.date())
             )
-            if len(rango_fechas) == 2:
-                f_inicio, f_fin = pd.to_datetime(rango_fechas[0]), pd.to_datetime(rango_fechas[1]) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+            if isinstance(rango_fechas, tuple) and len(rango_fechas) == 2:
+                f_inicio = pd.to_datetime(rango_fechas[0])
+                f_fin = pd.to_datetime(rango_fechas[1]) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
                 df_filtrado = df_historial[
                     (df_historial["fecha_dt"] >= f_inicio) & 
                     (df_historial["fecha_dt"] <= f_fin)
@@ -472,7 +472,6 @@ with tab_historial:
 
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # Métricas dinámicas adaptadas al filtro seleccionado
         total_cotiz = len(df_filtrado)
         monto_total = df_filtrado["Total Cobrado"].sum() if total_cotiz > 0 else 0.0
         promedio_venta = df_filtrado["Total Cobrado"].mean() if total_cotiz > 0 else 0.0
@@ -485,7 +484,6 @@ with tab_historial:
         st.markdown("---")
 
         if not df_filtrado.empty:
-            # Preparar dataframe para mostrar (ocultando columnas internas de control datetime)
             df_mostrar = df_filtrado.drop(columns=["fecha_dt"])
             
             st.dataframe(
