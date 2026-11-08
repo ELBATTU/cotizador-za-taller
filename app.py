@@ -62,19 +62,15 @@ def cargar_historial():
     if res.data:
         df = pd.DataFrame(res.data)
         
-        # Conversión segura de fecha de captura evitando errores de formato
-        df["dt_captura"] = pd.to_datetime(df["fecha"], errors='coerce')
-        df["fecha_captura"] = df["dt_captura"].dt.strftime("%Y-%m-%d %H:%M").fillna("-")
+        # Manejo de fechas (Captura vs Cotización real)
+        df["fecha_captura"] = pd.to_datetime(df["fecha"]).dt.strftime("%Y-%m-%d %H:%M")
         
-        # Conversión segura para la fecha de cotización (trato)
-        if "fecha_cotizacion" in df.columns:
-            df["dt_cotizacion"] = pd.to_datetime(df["fecha_cotizacion"], errors='coerce')
-            # Si alguna fila no tiene fecha_cotizacion, usa la de captura como respaldo
-            df["dt_cotizacion"] = df["dt_cotizacion"].fillna(df["dt_captura"])
+        if "fecha_cotizacion" in df.columns and df["fecha_cotizacion"].notnull().all():
+            df["dt_cotizacion"] = pd.to_datetime(df["fecha_cotizacion"])
+            df["Fecha Cotización"] = df["dt_cotizacion"].dt.strftime("%Y-%m-%d")
         else:
-            df["dt_cotizacion"] = df["dt_captura"]
-            
-        df["Fecha Cotización"] = df["dt_cotizacion"].dt.strftime("%Y-%m-%d").fillna("-")
+            df["dt_cotizacion"] = pd.to_datetime(df["fecha"])
+            df["Fecha Cotización"] = df["dt_cotizacion"].dt.strftime("%Y-%m-%d")
             
         cat_dict = cargar_catalogo()
         df["foto_url"] = df["producto"].map(lambda p: cat_dict.get(p, {}).get("foto"))
@@ -287,12 +283,6 @@ with tab_cotizador:
         st.subheader("🖼️ Producto & Datos Cliente")
         nombre_cliente = st.text_input("Nombre del Cliente:", placeholder="Ej. Juan Pérez")
         telefono_cliente = st.text_input("Teléfono WhatsApp (opcional):", placeholder="Ej. 4421234567")
-        
-        # Opción para registrar con fecha desfasada (Fecha de Cotización)
-        usar_fecha_manual = st.checkbox("📅 Registrar con fecha de cotización pasada (desfasada)")
-        fecha_cotizacion_manual = datetime.date.today()
-        if usar_fecha_manual:
-            fecha_cotizacion_manual = st.date_input("Selecciona la fecha real del trato:", value=datetime.date.today())
 
         lista_productos = list(CATALOGO.keys())
         if "Personalizado (Medida Libre)" in lista_productos:
@@ -432,7 +422,7 @@ with tab_cotizador:
 
     with col_act3:
         if st.button("💾 Guardar en Historial", use_container_width=True, key="btn_save_cot"):
-            f_cot_val = datetime.datetime.combine(fecha_cotizacion_manual, datetime.datetime.min.time()).isoformat() if usar_fecha_manual else datetime.datetime.now().isoformat()
+            f_ahora = datetime.datetime.now().isoformat()
             data_cot = {
                 "cliente": nombre_cliente.strip() if nombre_cliente.strip() else "General",
                 "telefono": telefono_cliente.strip(),
@@ -441,9 +431,10 @@ with tab_cotizador:
                 "cantidad": cantidad,
                 "precio_unitario": round(precio_unitario_final, 2),
                 "total_cobrado": round(precio_total_neto, 2),
-                "fecha_cotizacion": f_cot_val
+                "fecha_cotizacion": f_ahora
             }
             supabase.table("historial_cotizaciones").insert(data_cot).execute()
+            st.cache_data.clear()
             st.toast("¡Cotización guardada exitosamente!", icon="✅")
             st.success("✅ Cotización registrada.")
 
@@ -455,7 +446,7 @@ with tab_historial:
     df_hist = cargar_historial()
     
     if not df_hist.empty:
-        # CONTROLES DE FILTRADO POR FECHA
+        # CONTROLES DE FILTRADO POR FECHA DE COTIZACIÓN
         st.markdown("### 🔍 Filtrar Métricas y Registros")
         f_col1, f_col2 = st.columns([2, 3])
         
@@ -743,7 +734,7 @@ with tab_admin:
                 st.info("💡 No hay materiales registrados.")
 
         with mat_del_tab:
-            st.markdown("### 🗑️ Eliminar Material del Sistema digital")
+            st.markdown("### 🗑️ Eliminar Material del Sistema")
             mat_list_del = list(precios_materiales.keys())
             
             if mat_list_del:
