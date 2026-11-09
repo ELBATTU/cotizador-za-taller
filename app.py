@@ -461,18 +461,81 @@ with tab_cotizador:
     if st.session_state["carrito_cotizacion"]:
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("### 🛒 Partidas Agregadas en esta Cotización")
-        
+        st.info("💡 Puedes eliminar una partida específica usando el botón correspondiente en la lista de abajo.")
+
+        # Listar cada partida con su botón de eliminación individual
+        for idx, item in enumerate(st.session_state["carrito_cotizacion"]):
+            cols_partida = st.columns([4, 1])
+            with cols_partida[0]:
+                st.markdown(f"**{idx + 1}. {item['producto']}** — {item['cantidad']} pz(s) | {item['material']} | {item['largo']:.1f}x{item['ancho']:.1f} cm | Subtotal: **${item['total']:,.2f} MXN**")
+            with cols_partida[1]:
+                if st.button("❌ Quitar", key=f"del_partida_{idx}", use_container_width=True):
+                    st.session_state["carrito_cotizacion"].pop(idx)
+                    st.rerun()
+
         df_carrito = pd.DataFrame(st.session_state["carrito_cotizacion"])
-        st.dataframe(df_carrito[["producto", "material", "largo", "ancho", "cantidad", "precio_unitario", "total"]], use_container_width=True, hide_index=True)
+        gran_total_carrito = df_carrito["total"].sum() if not df_carrito.empty else 0.0
         
-        gran_total_carrito = df_carrito["total"].sum()
+        st.markdown("---")
         st.markdown(f"### 💰 **GRAN TOTAL ACUMULADO: ${gran_total_carrito:,.2f} MXN**")
 
         c_btn1, c_btn2, c_btn3, c_btn4 = st.columns(4)
         
         with c_btn1:
-            if st.button("🗑️ Vaciar Carrito", use_container_width=True):
+            if st.button("🗑️ Vaciar Todo", use_container_width=True):
                 st.session_state["carrito_cotizacion"] = []
+                st.rerun()
+
+        with c_btn2:
+            cliente_txt = nombre_cliente.strip() if nombre_cliente.strip() else "Cliente"
+            msg_wa = f"Hola *{cliente_txt}* 👋\n\nTe comparto el presupuesto de tu pedido en *Z&A Taller Creativo*:\n\n"
+            for idx, p in enumerate(st.session_state["carrito_cotizacion"], 1):
+                msg_wa += f"*{idx}. {p['producto']}*\n"
+                msg_wa += f"   📐 Medidas: {p['largo']:.1f} x {p['ancho']:.1f} cm\n"
+                msg_wa += f"   🪵 Material: {p['material']}\n"
+                msg_wa += f"   📦 Cantidad: {p['cantidad']} pz(s)\n"
+                msg_wa += f"   💵 Subtotal: ${p['total']:,.2f} MXN\n\n"
+            
+            msg_wa += f"💰 *GRAN TOTAL A PAGAR:* *${gran_total_carrito:,.2f} MXN*\n\n_Cotización válida por 15 días. ¡Quedo atento a tus comentarios!_"
+            
+            tel_clean = "".join(filter(str.isdigit, telefono_cliente))
+            wa_url = f"https://wa.me/{tel_clean}?text={urllib.parse.quote(msg_wa)}" if tel_clean else f"https://wa.me/?text={urllib.parse.quote(msg_wa)}"
+            st.link_button("📲 Enviar por WhatsApp", wa_url, type="primary", use_container_width=True)
+
+        with c_btn3:
+            pdf_bytes = generar_pdf_cotizacion(
+                {"cliente": cliente_txt, "telefono": telefono_cliente.strip() if telefono_cliente.strip() else "N/A"},
+                st.session_state["carrito_cotizacion"]
+            )
+            st.download_button(
+                label="📄 Descargar PDF Formal",
+                data=pdf_bytes,
+                file_name=f"Cotizacion_{cliente_txt.replace(' ', '_')}.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
+
+        with c_btn4:
+            if st.button("💾 Guardar en Historial", type="primary", use_container_width=True, key="btn_save_cart"):
+                f_ahora = datetime.datetime.now(ZoneInfo("America/Mexico_City")).strftime("%Y-%m-%d")
+                for p in st.session_state["carrito_cotizacion"]:
+                    data_cot = {
+                        "cliente": cliente_txt,
+                        "telefono": telefono_cliente.strip(),
+                        "producto": p["producto"],
+                        "material": p["material"],
+                        "cantidad": p["cantidad"],
+                        "precio_unitario": p["precio_unitario"],
+                        "total_cobrado": p["total"],
+                        "fecha_cotizacion": f_ahora
+                    }
+                    supabase.table("historial_cotizaciones").insert(data_cot).execute()
+                
+                st.cache_data.clear()
+                st.toast("¡Cotización múltiple guardada en el historial con éxito!", icon="✅")
+                st.success("✅ Cotizaciones registradas.")
+                st.session_state["carrito_cotizacion"] = []
+                time.sleep(1)
                 st.rerun()
 
         with c_btn2:
