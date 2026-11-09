@@ -528,8 +528,7 @@ with tab_cotizador:
         gran_lista_carrito = df_carrito["precio_lista_total"].sum()
         gran_desc_carrito = df_carrito["monto_descuento"].sum()
         
-        st.markdown(f"### 💰 **GRAN TOTAL A COBRAR: ${gran_total_carrito:,.2f} MXN** *(Precio Lista original: ${gran_lista_carrito:,.2f} \vert{} Ahorro/Descuento:${gran_desc_carrito:,.2f})*")
-
+st.markdown(f"### 💰 **GRAN TOTAL A COBRAR: ${gran_total_carrito:,.2f} MXN** *(Precio Lista original: ${gran_lista_carrito:,.2f} | Ahorro/Descuento: ${gran_desc_carrito:,.2f})*")
         c_btn1, c_btn2, c_btn3, c_btn4 = st.columns(4)
         
         with c_btn1:
