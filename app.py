@@ -371,18 +371,37 @@ with tab_cotizador:
         cantidad = col_c.number_input("Cantidad Pedida (piezas):", min_value=1, step=1, key="input_cantidad")
 
         st.markdown("<br>", unsafe_allow_html=True)
-        
-        # BOTÓN REUBICADO DEBAJO DE TIEMPO Y CANTIDAD
-        if st.button("➕ Agregar este producto a la Cotización", type="primary", use_container_width=True):
-            area_bruta_tmp = largo * ancho
-            area_con_merma_tmp = area_bruta_tmp * desperdicio_factor
-            costo_cm2_tmp = precios_materiales.get(material, 0.0)
-            costo_prod_unitario_tmp = (area_con_merma_tmp * costo_cm2_tmp) + (tiempo * tarifa_minuto)
-            precio_unitario_base_tmp = costo_prod_unitario_tmp / (1 - utilidad_porcentaje)
-            descuento_pct_tmp = 0.20 if cantidad >= 50 else (0.10 if cantidad >= 12 else 0.00)
-            precio_unitario_final_tmp = precio_unitario_base_tmp * (1 - descuento_pct_tmp)
-            precio_total_neto_tmp = precio_unitario_final_tmp * cantidad
 
+        # 🟢 NUEVO: Sección de Ajuste Manual de Precio por los "Patrones"
+        usar_precio_manual = st.checkbox("🏷️ Aplicar precio especial / manual (Patrones)")
+        
+        # Cálculos previos necesarios para sacar los valores base
+        area_bruta_tmp = largo * ancho
+        area_con_merma_tmp = area_bruta_tmp * desperdicio_factor
+        costo_cm2_tmp = precios_materiales.get(material, 0.0)
+        costo_prod_unitario_tmp = (area_con_merma_tmp * costo_cm2_tmp) + (tiempo * tarifa_minuto)
+        precio_unitario_base_tmp = costo_prod_unitario_tmp / (1 - utilidad_porcentaje)
+        descuento_pct_tmp = 0.20 if cantidad >= 50 else (0.10 if cantidad >= 12 else 0.00)
+        precio_unitario_sugerido = precio_unitario_base_tmp * (1 - descuento_pct_tmp)
+        precio_total_sugerido = precio_unitario_sugerido * cantidad
+
+        if usar_precio_manual:
+            # Te permite escribir el total global o el unitario que te indiquen
+            precio_total_neto_tmp = st.number_input(
+                "Total acordado ($ MXN):", 
+                value=round(precio_total_sugerido, 2), 
+                min_value=0.0, 
+                step=10.0,
+                help="Ingresa el precio final aleatorio o especial que dicten los patrones para este lote."
+            )
+            # Recalculamos el unitario en base al total manual introducido
+            precio_unitario_final_tmp = precio_total_neto_tmp / cantidad
+        else:
+            precio_unitario_final_tmp = precio_unitario_sugerido
+            precio_total_neto_tmp = precio_unitario_sugerido * cantidad
+
+        # BOTÓN PARA AGREGAR AL CARRITO (Con el precio manual o sugerido ya integrado)
+        if st.button("➕ Agregar este producto a la Cotización", type="primary", use_container_width=True):
             nueva_partida = {
                 "producto": producto_sel,
                 "material": material,
@@ -393,7 +412,7 @@ with tab_cotizador:
                 "total": round(precio_total_neto_tmp, 2)
             }
             st.session_state["carrito_cotizacion"].append(nueva_partida)
-            st.toast("¡Partida agregada a la cotización!", icon="🛒")
+            st.toast("¡Partida agregada con precio personalizado!", icon="🛒")
             st.rerun()
 
     # Cálculos para la vista previa actual abajo
