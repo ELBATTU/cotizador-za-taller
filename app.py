@@ -40,12 +40,7 @@ supabase = init_supabase()
 # FUNCIÓN DE COMPRESIÓN DE IMÁGENES
 # ==========================================
 def optimizar_imagen(uploaded_file, max_ancho=1200, calidad=85):
-    """
-    Comprime y redimensiona la imagen para ahorrar almacenamiento en la nube
-    sin afectar la calidad visual.
-    """
     img = PILImage.open(uploaded_file)
-    
     if img.mode in ("RGBA", "P"):
         img = img.convert("RGBA")
     else:
@@ -117,7 +112,6 @@ def cargar_historial():
         return df[["id", "Foto", "Fecha Cotización", "Fecha Captura", "Cliente", "Teléfono", "Producto", "Material", "Cantidad", "Precio Unitario", "Total Cobrado", "dt_cotizacion"]]
     return pd.DataFrame()
 
-# Carga inicial
 precios_materiales = cargar_materiales()
 CATALOGO = cargar_catalogo()
 
@@ -227,7 +221,7 @@ def generar_pdf_cotizacion(datos_cliente, partidas):
     return buffer
 
 # ==========================================
-# ESTILOS VISUALES CSS (INTERFAZ WEB)
+# ESTILOS VISUALES CSS
 # ==========================================
 st.markdown("""
     <style>
@@ -376,18 +370,42 @@ with tab_cotizador:
             
         cantidad = col_c.number_input("Cantidad Pedida (piezas):", min_value=1, step=1, key="input_cantidad")
 
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # 🟢 BOTÓN REUBICADO JUSTO AQUÍ DEBAJO DE TIEMPO Y CANTIDAD
+        if st.button("➕ Agregar este producto a la Cotización", type="primary", use_container_width=True):
+            area_bruta_tmp = largo * ancho
+            area_con_merma_tmp = area_bruta_tmp * desperdicio_factor
+            costo_cm2_tmp = precios_materiales.get(material, 0.0)
+            costo_prod_unitario_tmp = (area_con_merma_tmp * costo_cm2_tmp) + (tiempo * tarifa_minuto)
+            precio_unitario_base_tmp = costo_prod_unitario_tmp / (1 - utilidad_porcentaje)
+            descuento_pct_tmp = 0.20 if cantidad >= 50 else (0.10 if cantidad >= 12 else 0.00)
+            precio_unitario_final_tmp = precio_unitario_base_tmp * (1 - descuento_pct_tmp)
+            precio_total_neto_tmp = precio_unitario_final_tmp * cantidad
+
+            nueva_partida = {
+                "producto": producto_sel,
+                "material": material,
+                "largo": largo,
+                "ancho": ancho,
+                "cantidad": cantidad,
+                "precio_unitario": round(precio_unitario_final_tmp, 2),
+                "total": round(precio_total_neto_tmp, 2)
+            }
+            st.session_state["carrito_cotizacion"].append(nueva_partida)
+            st.toast("¡Partida agregada a la cotización!", icon="🛒")
+            st.rerun()
+
+    # Cálculos para la vista previa actual abajo
     area_bruta = largo * ancho
     area_con_merma = area_bruta * desperdicio_factor
     costo_cm2 = precios_materiales.get(material, 0.0)
-    
     costo_mat_unitario = area_con_merma * costo_cm2
     costo_maq_unitario = tiempo * tarifa_minuto
     costo_prod_unitario = costo_mat_unitario + costo_maq_unitario
-    
     precio_unitario_base = costo_prod_unitario / (1 - utilidad_porcentaje)
     descuento_pct = 0.20 if cantidad >= 50 else (0.10 if cantidad >= 12 else 0.00)
     precio_unitario_final = precio_unitario_base * (1 - descuento_pct)
-    
     costo_total_lote = costo_prod_unitario * cantidad
     precio_total_neto = precio_unitario_final * cantidad
     utilidad_total_lote = precio_total_neto - costo_total_lote
@@ -439,23 +457,6 @@ with tab_cotizador:
             </div>
             """, unsafe_allow_html=True)
 
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # BOTÓN PARA AGREGAR AL CARRITO
-    if st.button("➕ Agregar este producto a la Cotización", type="primary", use_container_width=True):
-        nueva_partida = {
-            "producto": producto_sel,
-            "material": material,
-            "largo": largo,
-            "ancho": ancho,
-            "cantidad": cantidad,
-            "precio_unitario": round(precio_unitario_final, 2),
-            "total": round(precio_total_neto, 2)
-        }
-        st.session_state["carrito_cotizacion"].append(nueva_partida)
-        st.toast("¡Partida agregada a la cotización!", icon="🛒")
-        st.rerun()
-
     # MOSTRAR CARRITO SI TIENE PARTIDAS
     if st.session_state["carrito_cotizacion"]:
         st.markdown("<br>", unsafe_allow_html=True)
@@ -506,7 +507,6 @@ with tab_cotizador:
         with c_btn4:
             if st.button("💾 Guardar en Historial", type="primary", use_container_width=True, key="btn_save_cart"):
                 f_ahora = datetime.datetime.now(ZoneInfo("America/Mexico_City")).strftime("%Y-%m-%d")
-                # Guardar cada partida del carrito como un registro independiente en el historial
                 for p in st.session_state["carrito_cotizacion"]:
                     data_cot = {
                         "cliente": cliente_txt,
@@ -528,7 +528,7 @@ with tab_cotizador:
                 st.rerun()
 
 # ------------------------------------------
-# TAB 2: HISTORIAL DE COTIZACIONES CON SELECTOR DE FECHA NATIVO
+# TAB 2: HISTORIAL DE COTIZACIONES
 # ------------------------------------------
 with tab_historial:
     st.header("📋 Historial de Cotizaciones Registradas")
