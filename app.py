@@ -46,18 +46,15 @@ def optimizar_imagen(uploaded_file, max_ancho=1200, calidad=85):
     """
     img = PILImage.open(uploaded_file)
     
-    # Si la imagen tiene transparencia (RGBA/P), la convertimos adecuadamente o la manejamos
     if img.mode in ("RGBA", "P"):
         img = img.convert("RGBA")
     else:
         img = img.convert("RGB")
         
-    # Redimensionar si excede el ancho máximo manteniendo proporciones
     if img.width > max_ancho or img.height > max_ancho:
         img.thumbnail((max_ancho, max_ancho), PILImage.Resampling.LANCZOS)
         
     buffer = io.BytesIO()
-    # Guardamos en formato WebP que ofrece excelente compresión y calidad superior
     img.save(buffer, format="WEBP", quality=calidad, optimize=True)
     buffer.seek(0)
     return buffer.getvalue()
@@ -89,7 +86,6 @@ def cargar_historial():
     if res.data:
         df = pd.DataFrame(res.data)
         
-        # Ajuste de hora a Zona Horaria de México para la Fecha de Captura
         dt_utc = pd.to_datetime(df["fecha"])
         if dt_utc.dt.tz is None:
             dt_mexico = dt_utc.dt.tz_localize("UTC").dt.tz_convert(ZoneInfo("America/Mexico_City"))
@@ -126,9 +122,9 @@ precios_materiales = cargar_materiales()
 CATALOGO = cargar_catalogo()
 
 # ==========================================
-# GENERADOR DE PDF PROFESIONAL CON LOGOTIPO
+# GENERADOR DE PDF PROFESIONAL MULTIPARTIDA
 # ==========================================
-def generar_pdf_cotizacion(datos_pdf):
+def generar_pdf_cotizacion(datos_cliente, partidas):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
     elements = []
@@ -176,7 +172,7 @@ def generar_pdf_cotizacion(datos_pdf):
     elements.append(Spacer(1, 15))
 
     cliente_info = [
-        [Paragraph(f"<b>Cliente:</b> {datos_pdf['cliente']}", body_style), Paragraph(f"<b>Teléfono:</b> {datos_pdf['telefono']}", body_style)]
+        [Paragraph(f"<b>Cliente:</b> {datos_cliente['cliente']}", body_style), Paragraph(f"<b>Teléfono:</b> {datos_cliente['telefono']}", body_style)]
     ]
     info_table = Table(cliente_info, colWidths=[300, 240])
     info_table.setStyle(TableStyle([
@@ -187,19 +183,22 @@ def generar_pdf_cotizacion(datos_pdf):
     elements.append(info_table)
     elements.append(Spacer(1, 15))
 
-    table_data = [
-        ["Producto", "Material", "Dimensiones", "Cantidad", "Precio Unitario", "Total"],
-        [
-            datos_pdf['producto'],
-            datos_pdf['material'],
-            f"{datos_pdf['largo']:.1f} x {datos_pdf['ancho']:.1f} cm",
-            str(datos_pdf['cantidad']),
-            f"${datos_pdf['precio_unitario']:,.2f} MXN",
-            f"${datos_pdf['total']:,.2f} MXN"
-        ]
-    ]
+    table_data = [["Producto", "Material", "Dimensiones", "Cant.", "P. Unitario", "Subtotal"]]
+    gran_total = 0.0
 
-    prod_table = Table(table_data, colWidths=[140, 100, 100, 50, 80, 70])
+    for item in partidas:
+        subtotal = item['total']
+        gran_total += subtotal
+        table_data.append([
+            Paragraph(str(item['producto']), body_style),
+            Paragraph(str(item['material']), body_style),
+            f"{item['largo']:.1f}x{item['ancho']:.1f}cm",
+            str(item['cantidad']),
+            f"${item['precio_unitario']:,.2f}",
+            f"${subtotal:,.2f}"
+        ])
+
+    prod_table = Table(table_data, colWidths=[130, 90, 90, 45, 90, 95])
     prod_table.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,0), COLOR_PRINCIPAL),
         ('TEXTCOLOR', (0,0), (-1,0), colors.white),
@@ -208,18 +207,18 @@ def generar_pdf_cotizacion(datos_pdf):
         ('ALIGN', (0,0), (-1,-1), 'CENTER'),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
         ('GRID', (0,0), (-1,-1), 0.5, COLOR_SECUNDARIO),
-        ('PADDING', (0,0), (-1,-1), 8),
+        ('PADDING', (0,0), (-1,-1), 6),
     ]))
     elements.append(prod_table)
-    elements.append(Spacer(1, 20))
+    elements.append(Spacer(1, 15))
 
     total_data = [
-        ["", Paragraph(f"<b>TOTAL A PAGAR:</b> <font color='#5C3A21' size='12'><b>${datos_pdf['total']:,.2f} MXN</b></font>", bold_style)]
+        ["", Paragraph(f"<b>GRAN TOTAL:</b> <font color='#5C3A21' size='12'><b>${gran_total:,.2f} MXN</b></font>", bold_style)]
     ]
     total_table = Table(total_data, colWidths=[300, 240])
     total_table.setStyle(TableStyle([('ALIGN', (1,0), (1,0), 'RIGHT')]))
     elements.append(total_table)
-    elements.append(Spacer(1, 30))
+    elements.append(Spacer(1, 25))
 
     elements.append(Paragraph("<i>¡Gracias por su preferencia! Quedamos a sus órdenes para cualquier ajuste en su proyecto.</i>", subtitle_style))
 
@@ -306,13 +305,22 @@ tab_cotizador, tab_historial, tab_admin = st.tabs([
 ])
 
 # ------------------------------------------
-# TAB 1: COTIZADOR INTERACTIVO
+# TAB 1: COTIZADOR INTERACTIVO CON CARRITO
 # ------------------------------------------
 with tab_cotizador:
+    if "carrito_cotizacion" not in st.session_state:
+        st.session_state["carrito_cotizacion"] = []
+    if "input_cliente" not in st.session_state:
+        st.session_state["input_cliente"] = ""
+    if "input_telefono" not in st.session_state:
+        st.session_state["input_telefono"] = ""
+    if "select_producto" not in st.session_state:
+        st.session_state["select_producto"] = "Personalizado (Medida Libre)"
+
     title_col1, title_col2 = st.columns([3, 1])
     with title_col1:
         st.markdown("<h1 style='color: #1E88E5; margin-bottom: 0;'>Z&A Taller Creativo</h1>", unsafe_allow_html=True)
-        st.markdown("<p style='font-size: 18px; color: #888;'>Cotizador Interactivo - Corte & Grabado Láser CNC</p>", unsafe_allow_html=True)
+        st.markdown("<p style='font-size: 18px; color: #888;'>Cotizador Interactivo con Carrito - Corte & Grabado Láser CNC</p>", unsafe_allow_html=True)
     with title_col2:
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("🔄 Nueva Cotización", use_container_width=True, type="secondary"):
@@ -320,6 +328,7 @@ with tab_cotizador:
             st.session_state["input_telefono"] = ""
             st.session_state["input_cantidad"] = 1
             st.session_state["select_producto"] = "Personalizado (Medida Libre)"
+            st.session_state["carrito_cotizacion"] = []
             st.rerun()
 
     st.markdown("---")
@@ -328,14 +337,6 @@ with tab_cotizador:
 
     with col_cat:
         st.subheader("🖼️ Producto & Datos Cliente")
-        
-        if "input_cliente" not in st.session_state:
-            st.session_state["input_cliente"] = ""
-        if "input_telefono" not in st.session_state:
-            st.session_state["input_telefono"] = ""
-        if "select_producto" not in st.session_state:
-            st.session_state["select_producto"] = "Personalizado (Medida Libre)"
-
         nombre_cliente = st.text_input("Nombre del Cliente:", placeholder="Ej. Juan Pérez", key="input_cliente")
         telefono_cliente = st.text_input("Teléfono WhatsApp (opcional):", placeholder="Ej. 4421234567", key="input_telefono")
 
@@ -397,7 +398,7 @@ with tab_cotizador:
     res_col1.metric("Costo Producción (1 pz)", f"${costo_prod_unitario:,.2f} MXN")
     res_col2.metric("Precio Base (1 pz)", f"${precio_unitario_base:,.2f} MXN")
     res_col3.metric("Descuento Mayoreo", f"{int(descuento_pct * 100)}%")
-    res_col4.metric("PRECIO TOTAL", f"${precio_total_neto:,.2f} MXN", delta=f"{cantidad} pieza(s)")
+    res_col4.metric("SUBTOTAL PARTIDA", f"${precio_total_neto:,.2f} MXN", delta=f"{cantidad} pieza(s)")
 
     with st.expander("🔍 **Ver Desglose Técnico & Estructura de Costos Interfaz**", expanded=False):
         st.markdown("### 📊 Análisis Detallado de Cotización")
@@ -440,67 +441,91 @@ with tab_cotizador:
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    col_act1, col_act2, col_act3 = st.columns(3)
-    with col_act1:
-        cliente_txt = nombre_cliente.strip() if nombre_cliente.strip() else "Cliente"
-        
-        desc_msg = f"🎉 *¡Incluye {int(descuento_pct * 100)}% de descuento por mayoreo!*\n" if descuento_pct > 0 else ""
-        foto_msg = f"🖼️ *Vista previa:* {datos_prod['foto']}\n" if datos_prod.get("foto") else ""
-
-        msg_wa = (
-            f"Hola *{cliente_txt}* 👋\n\n"
-            f"Te comparto la cotización de tu pedido de *Z&A Taller Creativo*:\n"
-            f"📌 *Producto:* {producto_sel}\n"
-            f"{foto_msg}"
-            f"📐 *Medidas:* {largo:,.1f} x {ancho:,.1f} cm\n"
-            f"🪵 *Material:* {material}\n"
-            f"📦 *Cantidad:* {cantidad} pieza(s)\n"
-            f"{desc_msg}"
-            f"💵 *Precio Unitario:* ${precio_unitario_final:,.2f} MXN\n"
-            f"💰 *TOTAL A COBRAR:* *${precio_total_neto:,.2f} MXN*\n\n"
-            f"_Cotización válida por 15 días. ¡Quedo atento a tus comentarios!_"
-        )
-        tel_clean = "".join(filter(str.isdigit, telefono_cliente))
-        wa_url = f"https://wa.me/{tel_clean}?text={urllib.parse.quote(msg_wa)}" if tel_clean else f"https://wa.me/?text={urllib.parse.quote(msg_wa)}"
-        st.link_button("📲 Enviar por WhatsApp", wa_url, type="primary", use_container_width=True)
-
-    with col_act2:
-        pdf_bytes = generar_pdf_cotizacion({
-            "cliente": cliente_txt,
-            "telefono": telefono_cliente.strip() if telefono_cliente.strip() else "N/A",
+    # BOTÓN PARA AGREGAR AL CARRITO
+    if st.button("➕ Agregar este producto a la Cotización", type="primary", use_container_width=True):
+        nueva_partida = {
             "producto": producto_sel,
             "material": material,
             "largo": largo,
             "ancho": ancho,
             "cantidad": cantidad,
-            "precio_unitario": precio_unitario_final,
-            "total": precio_total_neto
-        })
-        st.download_button(
-            label="📄 Descargar PDF Formal",
-            data=pdf_bytes,
-            file_name=f"Cotizacion_{cliente_txt.replace(' ', '_')}.pdf",
-            mime="application/pdf",
-            use_container_width=True
-        )
+            "precio_unitario": round(precio_unitario_final, 2),
+            "total": round(precio_total_neto, 2)
+        }
+        st.session_state["carrito_cotizacion"].append(nueva_partida)
+        st.toast("¡Partida agregada a la cotización!", icon="🛒")
+        st.rerun()
 
-    with col_act3:
-        if st.button("💾 Guardar en Historial", use_container_width=True, key="btn_save_cot"):
-            f_ahora = datetime.datetime.now(ZoneInfo("America/Mexico_City")).strftime("%Y-%m-%d")
-            data_cot = {
-                "cliente": nombre_cliente.strip() if nombre_cliente.strip() else "General",
-                "telefono": telefono_cliente.strip(),
-                "producto": producto_sel,
-                "material": material,
-                "cantidad": cantidad,
-                "precio_unitario": round(precio_unitario_final, 2),
-                "total_cobrado": round(precio_total_neto, 2),
-                "fecha_cotizacion": f_ahora
-            }
-            supabase.table("historial_cotizaciones").insert(data_cot).execute()
-            st.cache_data.clear()
-            st.toast("¡Cotización guardada exitosamente!", icon="✅")
-            st.success("✅ Cotización registrada.")
+    # MOSTRAR CARRITO SI TIENE PARTIDAS
+    if st.session_state["carrito_cotizacion"]:
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("### 🛒 Partidas Agregadas en esta Cotización")
+        
+        df_carrito = pd.DataFrame(st.session_state["carrito_cotizacion"])
+        st.dataframe(df_carrito[["producto", "material", "largo", "ancho", "cantidad", "precio_unitario", "total"]], use_container_width=True, hide_index=True)
+        
+        gran_total_carrito = df_carrito["total"].sum()
+        st.markdown(f"### 💰 **GRAN TOTAL ACUMULADO: ${gran_total_carrito:,.2f} MXN**")
+
+        c_btn1, c_btn2, c_btn3, c_btn4 = st.columns(4)
+        
+        with c_btn1:
+            if st.button("🗑️ Vaciar Carrito", use_container_width=True):
+                st.session_state["carrito_cotizacion"] = []
+                st.rerun()
+
+        with c_btn2:
+            cliente_txt = nombre_cliente.strip() if nombre_cliente.strip() else "Cliente"
+            msg_wa = f"Hola *{cliente_txt}* 👋\n\nTe comparto el presupuesto de tu pedido en *Z&A Taller Creativo*:\n\n"
+            for idx, p in enumerate(st.session_state["carrito_cotizacion"], 1):
+                msg_wa += f"*{idx}. {p['producto']}*\n"
+                msg_wa += f"   📐 Medidas: {p['largo']:.1f} x {p['ancho']:.1f} cm\n"
+                msg_wa += f"   🪵 Material: {p['material']}\n"
+                msg_wa += f"   📦 Cantidad: {p['cantidad']} pz(s)\n"
+                msg_wa += f"   💵 Subtotal: ${p['total']:,.2f} MXN\n\n"
+            
+            msg_wa += f"💰 *GRAN TOTAL A PAGAR:* *${gran_total_carrito:,.2f} MXN*\n\n_Cotización válida por 15 días. ¡Quedo atento a tus comentarios!_"
+            
+            tel_clean = "".join(filter(str.isdigit, telefono_cliente))
+            wa_url = f"https://wa.me/{tel_clean}?text={urllib.parse.quote(msg_wa)}" if tel_clean else f"https://wa.me/?text={urllib.parse.quote(msg_wa)}"
+            st.link_button("📲 Enviar por WhatsApp", wa_url, type="primary", use_container_width=True)
+
+        with c_btn3:
+            pdf_bytes = generar_pdf_cotizacion(
+                {"cliente": cliente_txt, "telefono": telefono_cliente.strip() if telefono_cliente.strip() else "N/A"},
+                st.session_state["carrito_cotizacion"]
+            )
+            st.download_button(
+                label="📄 Descargar PDF Formal",
+                data=pdf_bytes,
+                file_name=f"Cotizacion_{cliente_txt.replace(' ', '_')}.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
+
+        with c_btn4:
+            if st.button("💾 Guardar en Historial", type="primary", use_container_width=True, key="btn_save_cart"):
+                f_ahora = datetime.datetime.now(ZoneInfo("America/Mexico_City")).strftime("%Y-%m-%d")
+                # Guardar cada partida del carrito como un registro independiente en el historial
+                for p in st.session_state["carrito_cotizacion"]:
+                    data_cot = {
+                        "cliente": cliente_txt,
+                        "telefono": telefono_cliente.strip(),
+                        "producto": p["producto"],
+                        "material": p["material"],
+                        "cantidad": p["cantidad"],
+                        "precio_unitario": p["precio_unitario"],
+                        "total_cobrado": p["total"],
+                        "fecha_cotizacion": f_ahora
+                    }
+                    supabase.table("historial_cotizaciones").insert(data_cot).execute()
+                
+                st.cache_data.clear()
+                st.toast("¡Cotización múltiple guardada en el historial con éxito!", icon="✅")
+                st.success("✅ Cotizaciones registradas.")
+                st.session_state["carrito_cotizacion"] = []
+                time.sleep(1)
+                st.rerun()
 
 # ------------------------------------------
 # TAB 2: HISTORIAL DE COTIZACIONES CON SELECTOR DE FECHA NATIVO
@@ -674,7 +699,6 @@ with tab_admin:
                         else:
                             foto_url = None
                             if foto_up:
-                                # 💡 COMPRESIÓN AUTOMÁTICA DE IMAGEN AQUÍ
                                 file_bytes = optimizar_imagen(foto_up)
                                 file_path = f"{nombre_formateado.lower().replace(' ', '_')}.webp"
                                 
@@ -724,7 +748,6 @@ with tab_admin:
                     if btn_save_edit:
                         foto_url_final = dados_edit.get("foto")
                         if foto_up_edit:
-                            # 💡 COMPRESIÓN AUTOMÁTICA DE IMAGEN AL EDITAR
                             file_bytes = optimizar_imagen(foto_up_edit)
                             file_path = f"{p_edit_sel.strip().lower().replace(' ', '_')}.webp"
                             
