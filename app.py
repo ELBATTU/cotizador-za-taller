@@ -372,15 +372,15 @@ with tab_cotizador:
 
         st.markdown("<br>", unsafe_allow_html=True)
         
+        # BOTÓN REUBICADO DEBAJO DE TIEMPO Y CANTIDAD
         if st.button("➕ Agregar este producto a la Cotización", type="primary", use_container_width=True):
             area_bruta_tmp = largo * ancho
             area_con_merma_tmp = area_bruta_tmp * desperdicio_factor
             costo_cm2_tmp = precios_materiales.get(material, 0.0)
             costo_prod_unitario_tmp = (area_con_merma_tmp * costo_cm2_tmp) + (tiempo * tarifa_minuto)
             precio_unitario_base_tmp = costo_prod_unitario_tmp / (1 - utilidad_porcentaje)
-            
-            desc_pct_tmp = 0.20 if cantidad >= 50 else (0.10 if cantidad >= 12 else 0.00)
-            precio_unitario_final_tmp = precio_unitario_base_tmp * (1 - desc_pct_tmp)
+            descuento_pct_tmp = 0.20 if cantidad >= 50 else (0.10 if cantidad >= 12 else 0.00)
+            precio_unitario_final_tmp = precio_unitario_base_tmp * (1 - descuento_pct_tmp)
             precio_total_neto_tmp = precio_unitario_final_tmp * cantidad
 
             nueva_partida = {
@@ -389,7 +389,6 @@ with tab_cotizador:
                 "largo": largo,
                 "ancho": ancho,
                 "cantidad": cantidad,
-                "descuento_pct": int(desc_pct_tmp * 100),
                 "precio_unitario": round(precio_unitario_final_tmp, 2),
                 "total": round(precio_total_neto_tmp, 2)
             }
@@ -397,6 +396,7 @@ with tab_cotizador:
             st.toast("¡Partida agregada a la cotización!", icon="🛒")
             st.rerun()
 
+    # Cálculos para la vista previa actual abajo
     area_bruta = largo * ancho
     area_con_merma = area_bruta * desperdicio_factor
     costo_cm2 = precios_materiales.get(material, 0.0)
@@ -457,14 +457,17 @@ with tab_cotizador:
             </div>
             """, unsafe_allow_html=True)
 
+    # MOSTRAR CARRITO Y GESTIÓN DE ELIMINACIÓN INDIVIDUAL
     if st.session_state["carrito_cotizacion"]:
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("### 🛒 Partidas Agregadas en esta Cotización")
         
+        # Formatear tabla con índice legible para el usuario
         df_carrito = pd.DataFrame(st.session_state["carrito_cotizacion"])
         df_carrito.index = df_carrito.index + 1
-        st.dataframe(df_carrito[["producto", "material", "largo", "ancho", "cantidad", "descuento_pct", "precio_unitario", "total"]], use_container_width=True)
+        st.dataframe(df_carrito[["producto", "material", "largo", "ancho", "cantidad", "precio_unitario", "total"]], use_container_width=True)
         
+        # 🟢 SECCIÓN PARA ELIMINAR INDIVIDUALMENTE UN PRODUCTO
         del_col1, del_col2 = st.columns([3, 1])
         with del_col1:
             opciones_del = [f"Item {idx}: {p['producto']} ({p['cantidad']} pz - ${p['total']:.2f})" for idx, p in enumerate(st.session_state["carrito_cotizacion"], 1)]
@@ -490,27 +493,15 @@ with tab_cotizador:
 
         with c_btn2:
             cliente_txt = nombre_cliente.strip() if nombre_cliente.strip() else "Cliente"
-            
-            # 🟢 MENSAJE DE WHATSAPP LIMPIO, SIN EMOJIS, CON SALTOS DE LÍNEA CLAROS Y DESCUENTOS POR PARTIDA
-            msg_wa = f"Hola *{cliente_txt}*\n\n"
-            msg_wa += f"Z&A TALLER CREATIVO\n"
-            msg_wa += f"Cotizacion de Productos / Proyectos\n"
-            msg_wa += f"----------------------------------------\n\n"
-            
+            msg_wa = f"Hola *{cliente_txt}* 👋\n\nTe comparto el presupuesto de tu pedido en *Z&A Taller Creativo*:\n\n"
             for idx, p in enumerate(st.session_state["carrito_cotizacion"], 1):
-                desc_txt = f"Descuento mayoreo aplicado: *{p['descuento_pct']}%*\n" if p['descuento_pct'] > 0 else ""
-                msg_wa += f"Partida #{idx}: *{p['producto']}*\n"
-                msg_wa += f"• Medidas: {p['largo']:.1f} x {p['ancho']:.1f} cm\n"
-                msg_wa += f"• Material: {p['material']}\n"
-                msg_wa += f"• Cantidad: {p['cantidad']} pieza(s)\n"
-                if desc_txt:
-                    msg_wa += f"• {desc_txt}"
-                msg_wa += f"• Precio Unitario: ${p['precio_unitario']:,.2f} MXN\n"
-                msg_wa += f"• Subtotal: *${p['total']:,.2f} MXN*\n\n"
+                msg_wa += f"*{idx}. {p['producto']}*\n"
+                msg_wa += f"   📐 Medidas: {p['largo']:.1f} x {p['ancho']:.1f} cm\n"
+                msg_wa += f"   🪵 Material: {p['material']}\n"
+                msg_wa += f"   📦 Cantidad: {p['cantidad']} pz(s)\n"
+                msg_wa += f"   💵 Subtotal: ${p['total']:,.2f} MXN\n\n"
             
-            msg_wa += f"----------------------------------------\n"
-            msg_wa += f"GRAN TOTAL A PAGAR: *${gran_total_carrito:,.2f} MXN*\n\n"
-            msg_wa += f"Cotización válida por 15 días. ¡Quedo a tus órdenes para cualquier duda o confirmación de tu pedido!"
+            msg_wa += f"💰 *GRAN TOTAL A PAGAR:* *${gran_total_carrito:,.2f} MXN*\n\n_Cotización válida por 15 días. ¡Quedo atento a tus comentarios!_"
             
             tel_clean = "".join(filter(str.isdigit, telefono_cliente))
             wa_url = f"https://wa.me/{tel_clean}?text={urllib.parse.quote(msg_wa)}" if tel_clean else f"https://wa.me/?text={urllib.parse.quote(msg_wa)}"
