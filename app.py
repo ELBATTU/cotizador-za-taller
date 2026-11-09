@@ -102,31 +102,14 @@ def cargar_historial():
         cat_dict = cargar_catalogo()
         df["foto_url"] = df["producto"].map(lambda p: cat_dict.get(p, {}).get("foto"))
         
-        # Validar existencia de nuevas columnas de descuento si existen en registros previos
-        if "precio_lista" not in df.columns:
-            df["precio_lista"] = df["total_cobrado"]
-        else:
-            df["precio_lista"] = df["precio_lista"].fillna(df["total_cobrado"])
-
-        if "descuento_monto" not in df.columns:
-            df["descuento_monto"] = 0.0
-        else:
-            df["descuento_monto"] = df["descuento_monto"].fillna(0.0)
-
-        if "descuento_pct" not in df.columns:
-            df["descuento_pct"] = 0.0
-        else:
-            df["descuento_pct"] = df["descuento_pct"].fillna(0.0)
-        
         df.rename(columns={
             "fecha_captura": "Fecha Captura", "cliente": "Cliente", "telefono": "Teléfono",
             "producto": "Producto", "material": "Material", "cantidad": "Cantidad",
-            "precio_unitario": "Precio Unitario", "precio_lista": "Precio Lista Original",
-            "descuento_monto": "Descuento ($)", "descuento_pct": "Descuento (%)",
-            "total_cobrado": "Total Cobrado Final", "foto_url": "Foto"
+            "precio_unitario": "Precio Unitario", "total_cobrado": "Total Cobrado",
+            "foto_url": "Foto"
         }, inplace=True)
         
-        return df[["id", "Foto", "Fecha Cotización", "Fecha Captura", "Cliente", "Teléfono", "Producto", "Material", "Cantidad", "Precio Unitario", "Precio Lista Original", "Descuento ($)", "Descuento (%)", "Total Cobrado Final", "dt_cotizacion"]]
+        return df[["id", "Foto", "Fecha Cotización", "Fecha Captura", "Cliente", "Teléfono", "Producto", "Material", "Cantidad", "Precio Unitario", "Total Cobrado", "dt_cotizacion"]]
     return pd.DataFrame()
 
 precios_materiales = cargar_materiales()
@@ -389,40 +372,35 @@ with tab_cotizador:
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # SECCIÓN DE AJUSTE MANUAL Y CÁLCULOS DE LISTA VS COBRADO
-        usar_precio_manual = st.checkbox("🏷️ Aplicar precio especial / manual (Patrones)")
+        # 🟢 NUEVO: Sección de Ajuste Manual de Precio por los "Patrones"
+        usar_precio_manual = st.checkbox("🏷️ Aplicar precio especial / manual")
         
+        # Cálculos previos necesarios para sacar los valores base
         area_bruta_tmp = largo * ancho
         area_con_merma_tmp = area_bruta_tmp * desperdicio_factor
         costo_cm2_tmp = precios_materiales.get(material, 0.0)
         costo_prod_unitario_tmp = (area_con_merma_tmp * costo_cm2_tmp) + (tiempo * tarifa_minuto)
         precio_unitario_base_tmp = costo_prod_unitario_tmp / (1 - utilidad_porcentaje)
-        
-        # Precio de Lista Original Total (sin ningún tipo de descuento)
-        precio_lista_total_lote = precio_unitario_base_tmp * cantidad
-
-        # Descuento base por mayoreo automático
-        descuento_mayoreo_pct = 0.20 if cantidad >= 50 else (0.10 if cantidad >= 12 else 0.00)
-        precio_sugerido_total = precio_lista_total_lote * (1 - descuento_mayoreo_pct)
+        descuento_pct_tmp = 0.20 if cantidad >= 50 else (0.10 if cantidad >= 12 else 0.00)
+        precio_unitario_sugerido = precio_unitario_base_tmp * (1 - descuento_pct_tmp)
+        precio_total_sugerido = precio_unitario_sugerido * cantidad
 
         if usar_precio_manual:
+            # Te permite escribir el total global o el unitario que te indiquen
             precio_total_neto_tmp = st.number_input(
                 "Total acordado ($ MXN):", 
-                value=round(precio_sugerido_total, 2), 
+                value=round(precio_total_sugerido, 2), 
                 min_value=0.0, 
                 step=10.0,
-                help="Ingresa el precio final aleatorio o especial dictado para este lote."
+                help="Ingresa el precio final aleatorio o especial que dicten los patrones para este lote."
             )
-            precio_unitario_final_tmp = precio_total_neto_tmp / cantidad if cantidad > 0 else 0.0
+            # Recalculamos el unitario en base al total manual introducido
+            precio_unitario_final_tmp = precio_total_neto_tmp / cantidad
         else:
-            precio_unitario_final_tmp = precio_unitario_base_tmp * (1 - descuento_mayoreo_pct)
-            precio_total_neto_tmp = precio_sugerido_total
+            precio_unitario_final_tmp = precio_unitario_sugerido
+            precio_total_neto_tmp = precio_unitario_sugerido * cantidad
 
-        # Cálculo de métricas de descuento efectivas
-        monto_descontado = max(0.0, precio_lista_total_lote - precio_total_neto_tmp)
-        pct_descontado_real = (monto_descontado / precio_lista_total_lote * 100) if precio_lista_total_lote > 0 else 0.0
-
-        # BOTÓN PARA AGREGAR AL CARRITO
+        # BOTÓN PARA AGREGAR AL CARRITO (Con el precio manual o sugerido ya integrado)
         if st.button("➕ Agregar este producto a la Cotización", type="primary", use_container_width=True):
             nueva_partida = {
                 "producto": producto_sel,
@@ -430,17 +408,14 @@ with tab_cotizador:
                 "largo": largo,
                 "ancho": ancho,
                 "cantidad": cantidad,
-                "precio_lista_total": round(precio_lista_total_lote, 2),
-                "descuento_monto": round(monto_descontado, 2),
-                "descuento_pct": round(pct_descontado_real, 1),
                 "precio_unitario": round(precio_unitario_final_tmp, 2),
                 "total": round(precio_total_neto_tmp, 2)
             }
             st.session_state["carrito_cotizacion"].append(nueva_partida)
-            st.toast("¡Partida agregada a la cotización!", icon="🛒")
+            st.toast("¡Partida agregada con precio personalizado!", icon="🛒")
             st.rerun()
 
-    # Cálculos para la vista previa actual en la interfaz
+    # Cálculos para la vista previa actual abajo
     area_bruta = largo * ancho
     area_con_merma = area_bruta * desperdicio_factor
     costo_cm2 = precios_materiales.get(material, 0.0)
@@ -448,18 +423,19 @@ with tab_cotizador:
     costo_maq_unitario = tiempo * tarifa_minuto
     costo_prod_unitario = costo_mat_unitario + costo_maq_unitario
     precio_unitario_base = costo_prod_unitario / (1 - utilidad_porcentaje)
+    descuento_pct = 0.20 if cantidad >= 50 else (0.10 if cantidad >= 12 else 0.00)
+    precio_unitario_final = precio_unitario_base * (1 - descuento_pct)
     costo_total_lote = costo_prod_unitario * cantidad
-    precio_lista_total_actual = precio_unitario_base * cantidad
-    precio_total_neto = precio_total_neto_tmp
+    precio_total_neto = precio_unitario_final * cantidad
     utilidad_total_lote = precio_total_neto - costo_total_lote
 
     st.markdown("---")
     
     res_col1, res_col2, res_col3, res_col4 = st.columns(4)
     res_col1.metric("Costo Producción (1 pz)", f"${costo_prod_unitario:,.2f} MXN")
-    res_col2.metric("Precio Lista Lote (Sin Desc.)", f"${precio_lista_total_actual:,.2f} MXN")
-    res_col3.metric("Descuento Real Aplicado", f"{pct_descontado_real:.1f}% (${monto_descontado:,.2f} MXN)")
-    res_col4.metric("TOTAL PARTIDA FINAL", f"${precio_total_neto:,.2f} MXN", delta=f"{cantidad} pieza(s)")
+    res_col2.metric("Precio Base (1 pz)", f"${precio_unitario_base:,.2f} MXN")
+    res_col3.metric("Descuento Mayoreo", f"{int(descuento_pct * 100)}%")
+    res_col4.metric("SUBTOTAL PARTIDA", f"${precio_total_neto:,.2f} MXN", delta=f"{cantidad} pieza(s)")
 
     with st.expander("🔍 **Ver Desglose Técnico & Estructura de Costos Interfaz**", expanded=False):
         st.markdown("### 📊 Análisis Detallado de Cotización")
@@ -492,9 +468,9 @@ with tab_cotizador:
             st.markdown(f"""
             <div class='card-tech'>
                 <h4>📈 Márgenes y Rendimiento Lote</h4>
-                <div class='tech-row'><span>Margen Utilidad Base:</span> <b>{int(utilidad_porcentaje * 100)}%</b></div>
+                <div class='tech-row'><span>Margen Utilidad:</span> <b>{int(utilidad_porcentaje * 100)}%</b></div>
                 <div class='tech-row'><span>Costo Total Lote:</span> <b>${costo_total_lote:,.2f} MXN</b></div>
-                <div class='tech-row'><span>Descuento Aplicado:</span> <b>{pct_descontado_real:.1f}%</b></div>
+                <div class='tech-row'><span>Descuento Aplicado:</span> <b>{int(descuento_pct * 100)}%</b></div>
                 <hr style='margin: 8px 0;'>
                 <div class='tech-row'><span>Ganancia Neta Estimada:</span> <b style='color:#1565C0;'>${utilidad_total_lote:,.2f} MXN</b></div>
             </div>
@@ -505,21 +481,12 @@ with tab_cotizador:
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("### 🛒 Partidas Agregadas en esta Cotización")
         
+        # Formatear tabla con índice legible para el usuario
         df_carrito = pd.DataFrame(st.session_state["carrito_cotizacion"])
         df_carrito.index = df_carrito.index + 1
+        st.dataframe(df_carrito[["producto", "material", "largo", "ancho", "cantidad", "precio_unitario", "total"]], use_container_width=True)
         
-        # Mostrar tabla de carrito con detalle de descuentos
-        st.dataframe(
-            df_carrito[["producto", "material", "largo", "ancho", "cantidad", "precio_lista_total", "descuento_monto", "precio_unitario", "total"]].rename(columns={
-                "precio_lista_total": "Precio Lista",
-                "descuento_monto": "Descuento ($)",
-                "precio_unitario": "P. Unitario Final",
-                "total": "Total Final"
-            }), 
-            use_container_width=True
-        )
-        
-        # SECCIÓN PARA ELIMINAR INDIVIDUALMENTE UN PRODUCTO
+        # 🟢 SECCIÓN PARA ELIMINAR INDIVIDUALMENTE UN PRODUCTO
         del_col1, del_col2 = st.columns([3, 1])
         with del_col1:
             opciones_del = [f"Item {idx}: {p['producto']} ({p['cantidad']} pz - ${p['total']:.2f})" for idx, p in enumerate(st.session_state["carrito_cotizacion"], 1)]
@@ -534,10 +501,7 @@ with tab_cotizador:
 
         st.markdown("---")
         gran_total_carrito = df_carrito["total"].sum()
-        gran_lista_carrito = df_carrito["precio_lista_total"].sum()
-        gran_descuento_carrito = df_carrito["descuento_monto"].sum()
-
-        st.markdown(f"### 💰 **GRAN TOTAL ACUMULADO: ${gran_total_carrito:,.2f} MXN** <font color='#888' size='3'>(Precio Lista Original: ${gran_lista_carrito:,.2f} MXN | Descuento Total: -${gran_descuento_carrito:,.2f} MXN)</font>", unsafe_allow_html=True)
+        st.markdown(f"### 💰 **GRAN TOTAL ACUMULADO: ${gran_total_carrito:,.2f} MXN**")
 
         c_btn1, c_btn2, c_btn3, c_btn4 = st.columns(4)
         
@@ -585,9 +549,6 @@ with tab_cotizador:
                         "producto": p["producto"],
                         "material": p["material"],
                         "cantidad": p["cantidad"],
-                        "precio_lista": p["precio_lista_total"],
-                        "descuento_monto": p["descuento_monto"],
-                        "descuento_pct": p["descuento_pct"],
                         "precio_unitario": p["precio_unitario"],
                         "total_cobrado": p["total"],
                         "fecha_cotizacion": f_ahora
@@ -635,13 +596,13 @@ with tab_historial:
 
         st.markdown("---")
 
-        h_col1, h_col2, h_col3, h_col4 = st.columns(4)
-        h_col1.metric("Cotizaciones en Periodo", len(df_filtrado))
-        h_col2.metric("Monto Lista Teórico", f"${df_filtrado['Precio Lista Original'].sum():,.2f} MXN")
-        h_col3.metric("Descuentos Otorgados", f"-${df_filtrado['Descuento ($)'].sum():,.2f} MXN")
-        h_col4.metric("Total Cobrado Real", f"${df_filtrado['Total Cobrado Final'].sum():,.2f} MXN")
+        h_col1, h_col2, h_col3 = st.columns(3)
+        h_col1.metric("Cotizaciones en el Periodo", len(df_filtrado))
+        h_col2.metric("Monto Total Cotizado", f"${df_filtrado['Total Cobrado'].sum():,.2f} MXN")
+        promedio_venta = df_filtrado['Total Cobrado'].mean() if len(df_filtrado) > 0 else 0.0
+        h_col3.metric("Promedio por Venta", f"${promedio_venta:,.2f} MXN")
 
-        df_exportar = df_filtrado[["Fecha Cotización", "Fecha Captura", "Cliente", "Teléfono", "Producto", "Material", "Cantidad", "Precio Lista Original", "Descuento ($)", "Descuento (%)", "Precio Unitario", "Total Cobrado Final"]].copy()
+        df_exportar = df_filtrado[["Fecha Cotización", "Fecha Captura", "Cliente", "Teléfono", "Producto", "Material", "Cantidad", "Precio Unitario", "Total Cobrado"]].copy()
         df_exportar["Fecha Cotización"] = df_exportar["Fecha Cotización"].astype(str)
         csv_bytes = df_exportar.to_csv(index=False).encode('utf-8-sig')
 
@@ -657,7 +618,7 @@ with tab_historial:
         st.markdown("### ✏️ Edición Controlada")
         st.info("💡 Campos editables permitidos: **Nombre del Cliente**, **Teléfono** y **Fecha Cotización** (haz doble clic en la fecha para abrir el calendario interactivo). No se permiten fechas futuras.")
 
-        df_editable = df_filtrado[["id", "Foto", "Fecha Cotización", "Fecha Captura", "Cliente", "Teléfono", "Producto", "Material", "Cantidad", "Precio Lista Original", "Descuento ($)", "Descuento (%)", "Precio Unitario", "Total Cobrado Final"]].copy()
+        df_editable = df_filtrado[["id", "Foto", "Fecha Cotización", "Fecha Captura", "Cliente", "Teléfono", "Producto", "Material", "Cantidad", "Precio Unitario", "Total Cobrado"]].copy()
 
         df_editado = st.data_editor(
             df_editable,
@@ -674,11 +635,8 @@ with tab_historial:
                 "Producto": st.column_config.TextColumn("Producto", disabled=True),
                 "Material": st.column_config.TextColumn("Material", disabled=True),
                 "Cantidad": st.column_config.NumberColumn("Cantidad", format="%d", disabled=True),
-                "Precio Lista Original": st.column_config.NumberColumn("Precio Lista", format="$%.2f", disabled=True),
-                "Descuento ($)": st.column_config.NumberColumn("Desc. ($)", format="-$%.2f", disabled=True),
-                "Descuento (%)": st.column_config.NumberColumn("Desc. (%)", format="%.1f%%", disabled=True),
-                "Precio Unitario": st.column_config.NumberColumn("P. Unit. Final", format="$%.2f", disabled=True),
-                "Total Cobrado Final": st.column_config.NumberColumn("Total Cobrado", format="$%.2f", disabled=True)
+                "Precio Unitario": st.column_config.NumberColumn("Precio Unitario", format="$%.2f", disabled=True),
+                "Total Cobrado": st.column_config.NumberColumn("Total Cobrado", format="$%.2f", disabled=True)
             }
         )
 
