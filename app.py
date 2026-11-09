@@ -494,27 +494,26 @@ with tab_cotizador:
         with c_btn2:
             cliente_txt = nombre_cliente.strip() if nombre_cliente.strip() else "Cliente"
             
-            # 🟢 MENSAJE DE WHATSAPP ESTILIZADO, ELEGANTE Y CON DESCUENTOS POR PARTIDA
+            # 🟢 MENSAJE DE WHATSAPP LIMPIO Y CORRECTAMENTE ESTRUCTURADO
             msg_wa = f"Hola *{cliente_txt}* 👋\n\n"
-            msg_wa += f"✨ *Z&A TALLER CREATIVO* ✨\n"
-            msg_wa += f"📐 *Cotización de Productos / Proyectos*\n\n"
-            msg_wa += f"----------------------------------------\n\n"
+            msg_wa += "*Z&A TALLER CREATIVO*\n"
+            msg_wa += "Cotización de Productos / Proyectos\n"
+            msg_wa += "----------------------------------------\n\n"
             
             for idx, p in enumerate(st.session_state["carrito_cotizacion"], 1):
-                desc_txt = f"🎉 Descuento mayoreo aplicado: *{p['descuento_pct']}%*\n" if p['descuento_pct'] > 0 else ""
-                msg_wa += f"🔹 *Partida #{idx}: {p['producto']}*\n"
-                msg_wa += f"   • Medidas: {p['largo']:.1f} x {p['ancho']:.1f} cm\n"
-                msg_wa += f"   • Material: {p['material']}\n"
-                msg_wa += f"   • Cantidad: {p['cantidad']} pieza(s)\n"
+                desc_txt = f"🎉 Descuento mayoreo: *{p['descuento_pct']}%*\n" if p['descuento_pct'] > 0 else ""
+                msg_wa += f"*Partida #{idx}: {p['producto']}*\n"
+                msg_wa += f"• Medidas: {p['largo']:.1f} x {p['ancho']:.1f} cm\n"
+                msg_wa += f"• Material: {p['material']}\n"
+                msg_wa += f"• Cantidad: {p['cantidad']} pieza(s)\n"
                 if desc_txt:
-                    msg_wa += f"   • {desc_txt}"
-                msg_wa += f"   • Precio Unitario: ${p['precio_unitario']:,.2f} MXN\n"
-                msg_wa += f"   • *Subtotal: ${p['total']:,.2f} MXN*\n\n"
+                    msg_wa += f"• {desc_txt}"
+                msg_wa += f"• Precio Unitario: ${p['precio_unitario']:,.2f} MXN\n"
+                msg_wa += f"• *Subtotal: ${p['total']:,.2f} MXN*\n\n"
             
-            msg_wa += f"----------------------------------------\n"
+            msg_wa += "----------------------------------------\n"
             msg_wa += f"💰 *GRAN TOTAL A PAGAR:* *${gran_total_carrito:,.2f} MXN*\n\n"
-            msg_wa += f"📌 _Cotización válida por 15 días._\n"
-            msg_wa += f"¡Quedo a tus órdenes para cualquier duda o confirmación de tu pedido! 🚀"
+            msg_wa += "📌 Cotización válida por 15 días. ¡Quedo a tus órdenes para cualquier duda o confirmación de tu pedido!"
             
             tel_clean = "".join(filter(str.isdigit, telefono_cliente))
             wa_url = f"https://wa.me/{tel_clean}?text={urllib.parse.quote(msg_wa)}" if tel_clean else f"https://wa.me/?text={urllib.parse.quote(msg_wa)}"
