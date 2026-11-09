@@ -373,7 +373,7 @@ with tab_cotizador:
         st.markdown("<br>", unsafe_allow_html=True)
 
         # 🟢 NUEVO: Sección de Ajuste Manual de Precio por los "Patrones"
-        usar_precio_manual = st.checkbox("🏷️ Aplicar precio especial / manual (Patrones)")
+        usar_precio_manual = st.checkbox("🏷️ Aplicar precio especial / manual")
         
         # Cálculos previos necesarios para sacar los valores base
         area_bruta_tmp = largo * ancho
