@@ -13,6 +13,12 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
+# Puedes poner esto al inicio de tu app.py para probar
+try:
+    url_prueba = st.secrets["supabase"]["SUPABASE_URL"]
+    st.success("¡El archivo secrets.toml se detectó correctamente!")
+except Exception as e:
+    st.error("No se encontró el archivo secrets.toml o la estructura es incorrecta.")
 # Desactivar límite de píxeles para imágenes grandes
 PILImage.MAX_IMAGE_PIXELS = None
 
